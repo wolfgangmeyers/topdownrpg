@@ -40,25 +40,27 @@ export class InputHandler {
         const renderer = this.renderer; // Alias for listener scope
 
         window.addEventListener('keydown', (e) => {
-            this.keys.add(e.key);
+            // Convert to lowercase for case-insensitive tracking
+            const lowerCaseKey = e.key.toLowerCase();
+            this.keys.add(lowerCaseKey);
+
             // Prevent default scrolling for arrow keys and space
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+            if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(lowerCaseKey)) {
                 e.preventDefault();
             }
-            // Check for delete key press
+            // Check for delete key press (using original key for non-alpha)
             if (e.key === 'Delete') {
                 this.deletePressed = true;
             }
-            // Check for creative mode toggle press
-            if (e.key === 'c' || e.key === 'C') {
-                // Use a flag that gets reset after processing to avoid rapid toggling
-                this.toggleCreativeModePressed = true; 
+            // Check for creative mode toggle press (using lowercase)
+            if (lowerCaseKey === 'c') {
+                this.toggleCreativeModePressed = true;
             }
-            // Check for placeable selection keys
-            if (e.key === '1' || e.key === '2') { // Extend later for more keys
+            // Check for placeable selection keys (using original key for digits)
+            if (e.key === '1' || e.key === '2') {
                 this.placeableSelectionKeyPressed = e.key;
             }
-            // Check for Save/Load keys (F5/F9)
+            // Check for Save/Load keys (using original key for F-keys)
             if (e.key === 'F5') {
                 e.preventDefault(); // Prevent browser save action
                 this.saveKeyPressed = true;
@@ -67,15 +69,16 @@ export class InputHandler {
                 e.preventDefault(); // Prevent browser search action (less common)
                 this.loadKeyPressed = true;
             }
-            // Check for Interaction key
-            if (e.key === 'e' || e.key === 'E') {
+            // Check for Interaction key (using lowercase)
+            if (lowerCaseKey === 'e') {
                 this.interactPressed = true;
             }
         });
 
         window.addEventListener('keyup', (e) => {
-            this.keys.delete(e.key);
-            // Reset delete key flag on keyup
+            const lowerCaseKey = e.key.toLowerCase();
+            this.keys.delete(lowerCaseKey);
+            // Reset delete key flag on keyup (using original key)
             if (e.key === 'Delete') {
                 this.deletePressed = false;
             }
@@ -141,7 +144,8 @@ export class InputHandler {
     }
 
     public isKeyPressed(key: string): boolean {
-        return this.keys.has(key);
+        // Ensure check is also lowercase
+        return this.keys.has(key.toLowerCase());
     }
 
     // Get movement direction based on arrow keys
@@ -149,16 +153,16 @@ export class InputHandler {
         let dx = 0;
         let dy = 0;
 
-        if (this.isKeyPressed('ArrowLeft') || this.isKeyPressed('a')) {
+        if (this.isKeyPressed('arrowleft') || this.isKeyPressed('a')) {
             dx -= 1;
         }
-        if (this.isKeyPressed('ArrowRight') || this.isKeyPressed('d')) {
+        if (this.isKeyPressed('arrowright') || this.isKeyPressed('d')) {
             dx += 1;
         }
-        if (this.isKeyPressed('ArrowUp') || this.isKeyPressed('w')) {
+        if (this.isKeyPressed('arrowup') || this.isKeyPressed('w')) {
             dy -= 1;
         }
-        if (this.isKeyPressed('ArrowDown') || this.isKeyPressed('s')) {
+        if (this.isKeyPressed('arrowdown') || this.isKeyPressed('s')) {
             dy += 1;
         }
 

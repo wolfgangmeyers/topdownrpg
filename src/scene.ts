@@ -145,6 +145,11 @@ export class GameScene extends Scene {
             if (objImg) {
                 this.renderer.drawImage(objImg, obj.x, obj.y, obj.width, obj.height);
             }
+            // --- Draw Tree Health Bar --- 
+            if (obj instanceof Tree && obj.state === 'STANDING' && obj.currentHealth < obj.maxHealth) {
+                this.renderer.drawHealthBar(obj.x, obj.y, obj.width, obj.currentHealth, obj.maxHealth);
+            }
+            // --- End Draw Tree Health Bar ---
         });
 
         // --- Draw Dropped Items --- 

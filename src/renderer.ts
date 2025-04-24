@@ -136,6 +136,36 @@ export class Renderer {
     }
     // --- End Draw Pickup Prompt ---
 
+    // --- Draw Health Bar --- 
+    public drawHealthBar(x: number, y: number, width: number, currentHealth: number, maxHealth: number): void {
+        if (currentHealth < 0) currentHealth = 0;
+        if (currentHealth > maxHealth) currentHealth = maxHealth;
+
+        const barWidth = Math.max(40, width * 0.6); // Bar width relative to object width, min 40px
+        const barHeight = 8;
+        const barX = x - barWidth / 2;
+        const barY = y - (width / 2) - barHeight - 5; // Position above the object (using width for offset feels okay for tree)
+
+        const healthPercent = currentHealth / maxHealth;
+
+        this.ctx.save();
+        // Background
+        this.ctx.fillStyle = '#555'; // Dark grey background
+        this.ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        // Health Fill
+        this.ctx.fillStyle = healthPercent > 0.5 ? '#4CAF50' : (healthPercent > 0.2 ? '#FFC107' : '#F44336'); // Green -> Yellow -> Red
+        this.ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+
+        // Border (optional)
+        this.ctx.strokeStyle = '#333';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(barX, barY, barWidth, barHeight);
+        
+        this.ctx.restore();
+    }
+    // --- End Draw Health Bar ---
+
     // --- Draw Inventory UI ---
     public drawInventoryUI(inventory: Map<string, { item: import('./item').Item, quantity: number }>, 
                            equippedItemId: string | null,
