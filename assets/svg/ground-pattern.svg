@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50">
+  <defs>
+    <pattern id="groundTexture" patternUnits="userSpaceOnUse" width="50" height="50">
+      <!-- Base color (darker, less saturated green) -->
+      <rect width="50" height="50" fill="#558B2F"/> 
+      
+      <!-- Texture elements (more muted greens and browns) -->
+      <circle cx="10" cy="10" r="3" fill="#689F38" opacity="0.6"/>
+      <circle cx="35" cy="25" r="2" fill="#33691E" opacity="0.5"/>
+      <circle cx="20" cy="40" r="3" fill="#7CB342" opacity="0.6"/>
+      <circle cx="45" cy="5" r="2" fill="#689F38" opacity="0.5"/>
+      <circle cx="5" cy="30" r="2.5" fill="#8D6E63" opacity="0.3"/> <!-- Muted brown speckle -->
+      <circle cx="40" cy="45" r="2.5" fill="#6D4C41" opacity="0.25"/> <!-- Darker muted brown speckle -->
+    </pattern>
+  </defs>
+  
+  <!-- This rect is just for viewing the pattern directly if opened in a browser -->
+  <rect width="100%" height="100%" fill="url(#groundTexture)"/>
+</svg> 

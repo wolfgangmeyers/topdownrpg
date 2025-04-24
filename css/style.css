@@ -1,0 +1,25 @@
+/* Basic Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Courier New', Courier, monospace; /* Retro font */
+    background-color: #121212; /* Dark background */
+    color: #e0e0e0; /* Light text */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden; /* Prevent scrollbars */
+}
+
+canvas#gameCanvas {
+    background-color: #282828; /* Slightly lighter dark for canvas */
+    border: 2px solid #555; /* Edgy border */
+    /* Dimensions will be set via JS */
+}
+
+/* Add styles for UI elements later (dialogue box, inventory, etc.) */ 

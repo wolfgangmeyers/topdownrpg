@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" width="60" height="60">
+  <rect width="60" height="60" fill="none" /> <!-- Transparent background -->
+
+  <!-- Leafy Top - Layer 1 (Base shape, darker) -->
+  <path d="M 30 5 
+           C 10 5, 5 20, 10 35 
+           C 5 50, 20 55, 30 55 
+           C 40 55, 55 50, 50 35 
+           C 55 20, 50 5, 30 5 Z" 
+        fill="#33691E" stroke="#1B5E20" stroke-width="1" />
+  
+  <!-- Leafy Top - Layer 2 (Slightly smaller, offset, lighter) -->
+   <path d="M 32 8 
+           C 15 8, 10 22, 15 37 
+           C 10 50, 25 52, 32 52 
+           C 42 52, 50 48, 48 37 
+           C 50 22, 45 8, 32 8 Z" 
+        fill="#558B2F" stroke="#33691E" stroke-width="1" opacity="0.9" />
+
+  <!-- Leafy Top - Layer 3 (Highlights, smallest, brightest) -->
+   <path d="M 30 12 
+           C 20 12, 18 25, 22 38 
+           C 20 45, 28 48, 30 48 
+           C 35 48, 40 45, 38 38 
+           C 42 25, 38 12, 30 12 Z" 
+        fill="#7CB342" stroke="#558B2F" stroke-width="0.5" opacity="0.8" />
+
+  <!-- Trunk (smaller, slightly lower) -->
+  <rect x="26" y="53" width="8" height="7" fill="#795548" stroke="#5D4037" stroke-width="0.5" />
+
+</svg> 

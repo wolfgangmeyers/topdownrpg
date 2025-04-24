@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 25" width="30" height="25">
+  <rect width="30" height="25" fill="none" /> <!-- Transparent background -->
+
+  <!-- Log 1 (Bottom) -->
+  <rect x="2" y="12" width="26" height="10" rx="3" ry="3" fill="#8D6E63" stroke="#5D4037" stroke-width="1" />
+  <!-- Wood grain effect -->
+  <path d="M 5 17 Q 15 15, 25 17" stroke="#A1887F" stroke-width="0.7" fill="none" />
+  <path d="M 6 20 Q 15 19, 24 20" stroke="#A1887F" stroke-width="0.7" fill="none" />
+
+  <!-- Log 2 (Top Left) -->
+  <rect x="5" y="3" width="20" height="10" rx="3" ry="3" fill="#A1887F" stroke="#5D4037" stroke-width="1" transform="rotate(-5 15 8)"/>
+  <!-- Wood grain effect -->
+  <path d="M 8 7 Q 15 6, 22 7" stroke="#BCAAA4" stroke-width="0.7" fill="none" transform="rotate(-5 15 8)"/>
+  <path d="M 9 10 Q 15 9.5, 21 10" stroke="#BCAAA4" stroke-width="0.7" fill="none" transform="rotate(-5 15 8)"/>
+  
+</svg> 

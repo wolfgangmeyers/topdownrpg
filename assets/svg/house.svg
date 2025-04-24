@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="180" height="150">
+  <defs>
+    <!-- Simple wood grain pattern for door -->
+    <pattern id="woodGrain" patternUnits="userSpaceOnUse" width="10" height="10">
+      <rect width="10" height="10" fill="#A1887F"/>
+      <line x1="0" y1="5" x2="10" y2="5" stroke="#795548" stroke-width="1"/>
+      <line x1="5" y1="0" x2="5" y2="10" stroke="#8D6E63" stroke-width="0.5"/>
+    </pattern>
+    <!-- Simple thatch/shingle pattern for roof -->
+     <pattern id="roofTexture" patternUnits="userSpaceOnUse" width="15" height="10">
+      <rect width="15" height="10" fill="#BCAAA4"/> <!-- Light brown base -->
+      <path d="M 0 5 Q 7.5 0 15 5" stroke="#8D6E63" stroke-width="1" fill="none"/>
+      <path d="M 0 10 Q 7.5 5 15 10" stroke="#8D6E63" stroke-width="1" fill="none"/>
+    </pattern>
+  </defs>
+
+  <!-- Base Layer (Foundation/Shadow - slightly larger, darker) -->
+  <rect x="3" y="3" width="114" height="94" rx="5" ry="5" fill="#424242" opacity="0.5" />
+
+  <!-- Walls (Stone-like grey) -->
+  <rect x="5" y="5" width="110" height="90" rx="3" ry="3" fill="#78909C" stroke="#546E7A" stroke-width="1.5" />
+
+  <!-- Roof Area (Covers top 2/3rds approx) -->
+  <rect x="15" y="5" width="90" height="60" fill="url(#roofTexture)" stroke="#6D4C41" stroke-width="1" />
+  <!-- Roof Ridge (Adjusted Y) -->
+  <line x1="15" y1="35" x2="105" y2="35" stroke="#5D4037" stroke-width="2" />
+
+  <!-- Door (Centered bottom wall) -->
+  <rect x="50" y="80" width="20" height="15" fill="url(#woodGrain)" stroke="#5D4037" stroke-width="1.5" />
+  <circle cx="67" cy="87.5" r="1" fill="#4E342E" /> <!-- Door knob -->
+
+  <!-- Windows (On bottom/front wall area ONLY) -->
+  <rect x="25" y="75" width="20" height="12" fill="#424242" stroke="#37474F" stroke-width="1" />
+  <rect x="75" y="75" width="20" height="12" fill="#424242" stroke="#37474F" stroke-width="1" />
+
+</svg> 

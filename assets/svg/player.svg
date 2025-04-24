@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50" width="50" height="50">
+  <rect width="50" height="50" fill="none" /> <!-- Transparent background -->
+
+  <!-- Group to rotate all elements together -->
+  <g transform="rotate(-180 25 25)">
+    <!-- Hair (arc at top/back of head - slightly lower) -->
+    <path d="M 15 20 A 15 15 0 0 1 35 20" fill="#424242" stroke="#212121" stroke-width="1.5" />
+
+    <!-- Hands (Larger and further out) -->
+    <ellipse cx="8" cy="32" rx="6" ry="9" fill="#81C784" stroke="#388E3C" stroke-width="1.5" transform="rotate(-30 8 32)" />
+    <ellipse cx="42" cy="32" rx="6" ry="9" fill="#81C784" stroke="#388E3C" stroke-width="1.5" transform="rotate(30 42 32)" />
+
+    <!-- Head -->
+    <circle cx="25" cy="25" r="18" fill="#81C784" stroke="#388E3C" stroke-width="2" />
+
+    <!-- Eyes (lower) -->
+    <circle cx="20" cy="28" r="2" fill="#1B5E20" />
+    <circle cx="30" cy="28" r="2" fill="#1B5E20" />
+
+    <!-- Mouth (small arc, lower) -->
+    <path d="M 22 35 Q 25 37 28 35" stroke="#1B5E20" stroke-width="1.5" fill="none" />
+  </g>
+
+</svg> 
