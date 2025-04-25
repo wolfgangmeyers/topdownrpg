@@ -501,28 +501,41 @@ export class GameScene extends Scene {
 
     // Handles placing/removing objects in creative mode
     private handleCreativeModeInput(selectedObjectType: PlaceableObjectType): void {
-        if (this.inputHandler.mouseClicked) {
-            // Determine action based on selected type or if hovering over existing object
-            const mouseWorldX = this.inputHandler.mousePosition.x;
-            const mouseWorldY = this.inputHandler.mousePosition.y;
+        const mouseWorldX = this.inputHandler.mousePosition.x;
+        const mouseWorldY = this.inputHandler.mousePosition.y;
 
-            // Check if clicking on an existing object to potentially remove
+        // --- Handle Deletion (if Delete key is held while hovering) ---
+        if (this.inputHandler.deletePressed) {
+            let objectToRemove: Tree | House | null = null;
+            for (const obj of this.staticObjects) {
+                // Bounding box check for hover
+                if (mouseWorldX >= obj.x - obj.width / 2 && mouseWorldX <= obj.x + obj.width / 2 &&
+                    mouseWorldY >= obj.y - obj.height / 2 && mouseWorldY <= obj.y + obj.height / 2) {
+                    objectToRemove = obj; // Found object under cursor
+                    break;
+                }
+            }
+            // If hovering over an object, remove it
+            if (objectToRemove) {
+                this.removeObjectAt(objectToRemove.x, objectToRemove.y, this.staticObjects);
+                // Early exit? If we successfully deleted, maybe don't process placement click in same frame?
+                // Alternatively, the placement logic below already checks `!clickedExisting` which might suffice.
+            }
+        }
+
+        // --- Handle Placement (if mouse is clicked and not over existing) ---
+        if (this.inputHandler.mouseClicked) {
+            // Check if clicking on an existing object (to prevent placement on top)
             let clickedExisting = false;
             for (const obj of this.staticObjects) {
-                 // A simple bounding box check is sufficient here
                  if (mouseWorldX >= obj.x - obj.width / 2 && mouseWorldX <= obj.x + obj.width / 2 &&
                      mouseWorldY >= obj.y - obj.height / 2 && mouseWorldY <= obj.y + obj.height / 2) {
                      clickedExisting = true;
-                     // If delete key is held, remove it (basic removal)
-                     if (this.inputHandler.deletePressed) {
-                         this.removeObjectAt(obj.x, obj.y, this.staticObjects);
-                     }
-                     // Add other creative interactions later (e.g., selection, modification)
                      break;
                  }
             }
 
-            // If not clicking an existing object, place the selected object type
+            // If not clicking an existing object AND a type is selected, place it
             if (!clickedExisting && selectedObjectType) {
                 this.placeObjectAt(mouseWorldX, mouseWorldY, selectedObjectType);
             }
