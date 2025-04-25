@@ -75,9 +75,11 @@ export class Game {
             console.log("Loading sounds...");
             // Using Promise.all to load sounds concurrently
             await Promise.all([
-                this.audioPlayer.loadSound('axe-hit', '/assets/axe-swing.mp3'),
-                this.audioPlayer.loadSound('axe-miss', '/assets/axe-swing-miss.mp3'),
-                this.audioPlayer.loadSound('tree-fall', '/assets/tree-fall.mp3') // Add tree fall sound
+                this.audioPlayer.loadSound('axe-hit', '/assets/audio/axe-hit.mp3'), // Adjusted path
+                this.audioPlayer.loadSound('axe-miss', '/assets/audio/axe-miss.mp3'), // Adjusted path
+                this.audioPlayer.loadSound('tree-fall', '/assets/audio/tree-fall.mp3'), // Adjusted path
+                this.audioPlayer.loadSound('pickup', '/assets/audio/pickup.mp3'), // Add pickup sound
+                this.audioPlayer.loadSound('item-drop', '/assets/audio/drop.mp3') // Add item drop sound
                 // Add other sounds here
             ]);
             console.log("Sounds loaded.");
@@ -309,7 +311,8 @@ export class Game {
         */
 
         // --- Handle UI Interactions --- 
-        if (this.inputHandler.uiMouseClicked && this.player) {
+        // Call handler if either a regular UI click or a shift+click UI action occurred
+        if ((this.inputHandler.uiMouseClicked || this.inputHandler.uiDropActionClicked) && this.player) {
             this.handleInventoryClick();
         }
         // --- End UI Interactions ---
@@ -320,7 +323,8 @@ export class Game {
 
     // --- Handle Inventory Click --- 
     private handleInventoryClick(): void {
-        if (!this.player) return;
+        if (!this.player || !this.currentScene || !(this.currentScene instanceof GameScene)) return;
+        const scene = this.currentScene as GameScene; // Type assertion for spawnDroppedItem access
 
         const clickX = this.inputHandler.mouseScreenPosition.x;
         const clickY = this.inputHandler.mouseScreenPosition.y;
@@ -341,27 +345,46 @@ export class Game {
             const clickedSlotIndex = Math.floor((clickX - startX) / (slotSize + padding));
 
             // Map the clicked slot index to the item ID in the inventory Map
-            let itemToEquipId: string | null = null;
+            let itemIdInSlot: string | null = null;
             let currentSlotIndex = 0;
             for (const itemId of this.player.inventory.keys()) {
                 if (currentSlotIndex === clickedSlotIndex) {
-                    itemToEquipId = itemId;
+                    itemIdInSlot = itemId;
                     break;
                 }
                 currentSlotIndex++;
                 if (currentSlotIndex >= maxSlots) break; // Don't check beyond visible slots
             }
 
-            // If an item exists in that slot, attempt to equip it
-            if (itemToEquipId) {
-                console.log(`Inventory slot ${clickedSlotIndex} clicked, attempting to equip item: ${itemToEquipId}`);
-                this.player.equipItem(itemToEquipId);
+            // If an item exists in that slot...
+            if (itemIdInSlot) {
+                // Check if it was a drop action (Shift+Click)
+                if (this.inputHandler.uiDropActionClicked) {
+                    console.log(`Inventory slot ${clickedSlotIndex} Shift+Clicked, attempting to drop item: ${itemIdInSlot}`);
+                    // Attempt to remove 1 item from inventory
+                    const dropSuccess = this.player.dropItemById(itemIdInSlot, 1);
+                    if (dropSuccess) {
+                        // Spawn the item in the world near the player
+                        const dropDistance = 30; // Distance in front
+                        const angle = this.player.rotation - Math.PI / 2; // Adjust rotation
+                        const dropX = this.player.x + Math.cos(angle) * dropDistance;
+                        const dropY = this.player.y + Math.sin(angle) * dropDistance;
+                        scene.spawnDroppedItem(itemIdInSlot, dropX, dropY, 1);
+                    } else {
+                        // Log already handled in player.removeItem/dropItemById
+                    }
+                } else { // Regular click (Equip action)
+                    console.log(`Inventory slot ${clickedSlotIndex} clicked, attempting to equip item: ${itemIdInSlot}`);
+                    this.player.equipItem(itemIdInSlot);
+                }
             } else {
                 console.log(`Inventory slot ${clickedSlotIndex} clicked, but it's empty.`);
-                // Optionally unequip if clicking an empty slot?
-                // this.player.unequipItem(); 
+                // Optionally unequip if clicking an empty slot with a regular click?
+                // if (!this.inputHandler.uiDropActionClicked) {
+                //     this.player.unequipItem(); 
+                // }
             }
-        }
+        } // End if click within inventory bounds
     }
     // --- End Handle Inventory Click ---
 

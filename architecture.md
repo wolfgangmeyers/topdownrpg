@@ -31,17 +31,17 @@ The architecture is component-based, centered around a main `Game` class that ma
         *   Stores world dimensions (`worldWidth`, `worldHeight`).
         *   `load()`: Loads scene-specific assets and attempts to load layout state (including tree health, dropped items) from IndexedDB via `loadState()`. Populates defaults if no saved state.
         *   `update()`: Handles game logic based on mode (Gameplay vs. Creative). Updates player, checks collisions (ignoring falling trees), updates camera, handles creative object placement/removal. Handles tool usage (`handleGameplayInput` -> Axe swing, hitbox check, tree damage, trigger sounds/animation), item pickup (`handleItemPickup` -> proximity check, trigger pickup), and timed tree destruction (`setTimeout`, `destroyTreeAndSpawnLogs`).
-        *   `draw()`: Renders the scene content (background, static objects, dropped items, player, equipped item animation) using the `Renderer`, applying camera transformations. Renders creative mode UI overlay and item pickup prompts.
+        *   `draw()`: Renders the scene content (background, static objects, dropped items, player, equipped item animation) using the `Renderer`, applying camera transformations. Renders creative mode UI overlay, item pickup prompts, and tree health bars.
         *   `saveState()`/`loadState()`: Asynchronous methods using `db.ts` helpers to persist/retrieve `staticObjects` (including tree health) and `droppedItems` layout to/from IndexedDB, keyed by `sceneId`.
 *   **`renderer.ts`**: Canvas rendering abstraction.
     *   Holds the canvas context (`ctx`).
     *   Manages viewport size and camera coordinates (`cameraX`, `cameraY`).
-    *   Provides drawing primitives: `clear`, `drawBackground` (using patterns), `drawImage` (handles rotation), `drawText`, `drawHighlight`, `drawGhostImage`, `drawPickupPrompt`.
+    *   Provides drawing primitives: `clear`, `drawBackground` (using patterns), `drawImage` (handles rotation), `drawText`, `drawHighlight`, `drawGhostImage`, `drawPickupPrompt`, `drawHealthBar`.
     *   Provides UI drawing methods (screen coordinates): `drawInventoryUI`.
     *   Handles canvas resizing.
 *   **`input.ts`**: Input handling.
     *   `InputHandler` class attaches listeners for `keydown`, `keyup`, `mousemove`, `mousedown`.
-    *   Tracks pressed keys (`Set<string>`), mouse position (world: `mousePosition`, screen: `mouseScreenPosition`), single-frame flags (`useToolPressed`, `interactPressed`, `uiMouseClicked`, etc.).
+    *   Tracks pressed keys (`Set<string>`, lowercase for case-insensitivity), mouse position (world: `mousePosition`, screen: `mouseScreenPosition`), single-frame flags (`useToolPressed`, `interactPressed`, `uiMouseClicked`, etc.).
     *   Provides methods to query input state (`isKeyPressed`, `getMovementDirection`).
     *   Resets single-frame flags each update (`resetFrameState`).
     *   Requires `Renderer` reference for coordinate conversion.

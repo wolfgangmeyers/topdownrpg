@@ -217,6 +217,42 @@ export class Player {
     }
     // --- End Animation Control Methods ---
 
+    // --- Item Drop Method ---
+    /**
+     * Attempts to drop the currently equipped item.
+     * Removes one quantity of the item from inventory.
+     * Returns the itemId if successful, null otherwise.
+     */
+    dropEquippedItem(): string | null {
+        if (!this.equippedItemId) {
+            console.log("Nothing equipped to drop.");
+            return null;
+        }
+
+        const itemIdToDrop = this.equippedItemId;
+        const success = this.removeItem(itemIdToDrop, 1); // Always remove 1
+
+        if (success) {
+            console.log(`Dropped 1 ${itemIdToDrop}.`);
+            // removeItem handles unequipping if the stack becomes empty
+            return itemIdToDrop;
+        } else {
+            console.warn(`Failed to remove ${itemIdToDrop} for dropping (should not happen if equipped).`);
+            return null;
+        }
+    }
+    // --- End Item Drop Method ---
+
+    /**
+     * Attempts to drop a specific item by ID, removing the specified quantity.
+     * Directly calls removeItem.
+     * Returns true if the item was successfully removed, false otherwise.
+     */
+    dropItemById(itemId: string, quantity: number = 1): boolean {
+        console.log(`Attempting to drop ${quantity} of ${itemId} via ID...`);
+        return this.removeItem(itemId, quantity);
+    }
+
     // Placeholder for drawing logic (will likely be handled by Renderer + AssetLoader)
     // draw(ctx: CanvasRenderingContext2D): void { ... }
 } 

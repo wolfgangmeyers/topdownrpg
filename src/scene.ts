@@ -125,6 +125,9 @@ export class GameScene extends Scene {
         
         // --- Update Camera --- 
         this.updateCameraPosition();
+
+        // --- Handle Item Pickup Prompt Logic ---
+        this.updateClosestPickupItem(); 
     }
 
     draw(creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType): void {
@@ -287,132 +290,148 @@ export class GameScene extends Scene {
     // --- Helper methods for splitting logic ---
 
     private handleGameplayInput(deltaTime: number): void {
-        // --- Handle Movement & Collision --- 
+        // --- Handle Movement ---
         const { dx, dy } = this.inputHandler.getMovementDirection();
         if (dx !== 0 || dy !== 0) {
-            // Store original position
-            const originalX = this.player.x;
-            const originalY = this.player.y;
+            const oldX = this.player.x;
+            const oldY = this.player.y;
+            this.player.move(dx * deltaTime * 60, dy * deltaTime * 60); // Adjust speed based on deltaTime
 
-            // Move on X axis and check collision
-            this.player.move(dx, 0);
-            let collisionX = false;
-            for (const obj of this.staticObjects) {
-                // Ignore falling trees for collision
-                if (!(obj instanceof Tree && obj.state === 'FALLING') && this.checkCollision(this.player, obj)) {
-                    collisionX = true;
-                    break;
-                }
-            }
-            if (collisionX) {
-                this.player.x = originalX; // Revert X movement
-            }
-
-            // Move on Y axis and check collision
-            this.player.move(0, dy);
-            let collisionY = false;
-            for (const obj of this.staticObjects) {
-                // Ignore falling trees for collision
-                // Use potentially updated player.x for Y check
-                if (!(obj instanceof Tree && obj.state === 'FALLING') && this.checkCollision(this.player, obj)) {
-                    collisionY = true;
-                    break;
-                }
-            }
-            if (collisionY) {
-                this.player.y = originalY; // Revert Y movement
-            }
-
-            // Check boundaries *after* collision resolution
+            // Check boundaries after calculating new position
             this.checkBoundaries(this.player);
-        }
-        // --- End Movement & Collision ---
 
-        // --- Handle Interactions (Item Pickup) ---
-        this.handleItemPickup();
-        // --- End Interactions ---
-
-        // --- Handle Tool Usage (Axe Chopping) --- 
-        const currentTime = Date.now();
-        if (this.inputHandler.useToolPressed && (currentTime - this.lastActionTime > this.actionCooldown)) {
-            const equippedItem = this.player.getEquippedItem();
-
-            // Check if the Axe is equipped
-            if (equippedItem && equippedItem.id === 'axe') {
-                this.lastActionTime = currentTime; // Reset cooldown timer
-                console.log("Player attempting to use Axe...");
-                this.player.startSwing(); // Start swing animation
-
-                // Define axe properties (get from Item config later if needed)
-                const axeDamage = 25; // Health points removed per hit
-
-                // Calculate target point slightly in front of player based on rotation
-                // --- Replaced with Axe Hitbox --- 
-                const axeHitboxWidth = 20; 
-                const axeHitboxHeight = 20;
-                const hitDist = 25; // How far in front of player the center of the hitbox is
-                // Corrected calculation based on player rotation (0 = up)
-                const hitX = this.player.x + Math.sin(this.player.rotation) * hitDist;
-                const hitY = this.player.y - Math.cos(this.player.rotation) * hitDist; // Use -cos because Y is inverted
-                const axeHitbox = {
-                    x: hitX, 
-                    y: hitY,
-                    width: axeHitboxWidth, 
-                    height: axeHitboxHeight
-                }; 
-                // Optional: Draw hitbox for debugging
-                // this.renderer.drawDebugRect(axeHitbox.x, axeHitbox.y, axeHitbox.width, axeHitbox.height, 'red');
-                // --- End Axe Hitbox Calc ---
-
-                // Find the first tree that collides with the axe hitbox
-                let hitTree: Tree | null = null;
-
-                // Filter for standing trees only
-                const treesInScene = this.staticObjects.filter((obj): obj is Tree => obj instanceof Tree && obj.state === 'STANDING');
-
-                for (const tree of treesInScene) {
-                    if (this.checkCollision(axeHitbox, tree)) {
-                        hitTree = tree;
-                        break; // Hit the first tree found
-                    }
+            // Check collision with static objects AFTER boundary check
+            let collision = false;
+            for (const obj of this.staticObjects) {
+                // Ignore collision with falling trees
+                if (obj instanceof Tree && obj.state === 'FALLING') {
+                    continue;
                 }
-                // --- End Finding Hit Tree ---
-
-                // If a standing tree is found in range, damage it
-                if (hitTree && hitTree.state === 'STANDING') { 
-                    // Play hit sound immediately
-                    this.audioPlayer.play('axe-hit');
-
-                    // Apply damage
-                    (hitTree as Tree).takeDamage(axeDamage);
-
-                    // Check if health is now zero and start falling process
-                    if ((hitTree as Tree).currentHealth <= 0) {
-                        console.log(`Tree at (${(hitTree as Tree).x.toFixed(0)}, ${(hitTree as Tree).y.toFixed(0)}) starting to fall!`);
-                        hitTree.state = 'FALLING'; // Change state
-                        this.audioPlayer.play('tree-fall'); // Play fall sound
-                        
-                        // Schedule destruction and log spawning after a delay
-                        const treeToDestroy = hitTree; // Capture the correct tree instance for the timeout
-                        setTimeout(() => {
-                            this.destroyTreeAndSpawnLogs(treeToDestroy);
-                        }, 1000); // 1 second delay
-                    }
-                } else if (equippedItem && equippedItem.id === 'axe') {
-                    // Axe equipped, but missed or hit a non-standing tree
-                    console.log("Axe swung, but no standing tree in range.");
-                    this.audioPlayer.play('axe-miss'); // Play miss sound
-                    this.player.startSwing(); // Start swing animation on miss
-                } else {
-                    // Player clicked, but no axe equipped or other action
-                    console.log("Player action detected, but no axe equipped or cooldown active.");
+                if (this.checkCollision(this.player, obj)) {
+                    collision = true;
+                    break;
                 }
             }
+
+            // If collision, revert movement
+            if (collision) {
+                this.player.x = oldX;
+                this.player.y = oldY;
+            }
         }
-        // --- End Tool Usage ---
+
+        // --- Handle Tool Usage (e.g., Axe Swing) ---
+        if (this.inputHandler.useToolPressed) {
+            const now = Date.now();
+            if (now - this.lastActionTime >= this.actionCooldown) {
+                this.lastActionTime = now;
+
+                const equippedItem = this.player.getEquippedItem();
+                if (equippedItem && equippedItem.itemType === ItemType.TOOL && equippedItem.id === 'axe') {
+                    console.log("Axe Swing Attempt");
+                    this.player.startSwing(); // Start swing animation regardless of hit
+
+                    // Define hitbox based on player position and rotation
+                    const reachDistance = 50; // How far the axe reaches
+                    const hitboxWidth = 20;
+                    const hitboxHeight = 20;
+
+                    // Calculate position in front of the player
+                    const angle = this.player.rotation - Math.PI / 2; // Adjust rotation to match world coords
+                    const hitboxX = this.player.x + Math.cos(angle) * reachDistance - hitboxWidth / 2;
+                    const hitboxY = this.player.y + Math.sin(angle) * reachDistance - hitboxHeight / 2;
+
+                    let hitTree: Tree | null = null;
+                    for (const obj of this.staticObjects) {
+                        if (obj instanceof Tree && obj.state === 'STANDING') { // Only hit standing trees
+                            if (this.checkCollision({ x: hitboxX, y: hitboxY, width: hitboxWidth, height: hitboxHeight }, obj)) {
+                                hitTree = obj;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (hitTree) {
+                        console.log("Hit Tree!");
+                        this.audioPlayer.play('axe-hit'); // Play hit sound
+                        hitTree.takeDamage(25); // Example damage
+                        console.log(`Tree health: ${hitTree.currentHealth}/${hitTree.maxHealth}`);
+
+                        if (hitTree.currentHealth <= 0) {
+                            console.log("Tree Felled!");
+                            hitTree.state = 'FALLING'; // Mark as falling
+                            this.audioPlayer.play('tree-fall'); // Play fall sound
+                            // Schedule destruction and log spawning after a delay
+                            setTimeout(() => this.destroyTreeAndSpawnLogs(hitTree!), 1000); // 1 second delay
+                        }
+                    } else {
+                        console.log("Axe Missed!");
+                        this.audioPlayer.play('axe-miss'); // Play miss sound
+                    }
+                } else if (equippedItem) {
+                    console.log(`Cannot use item '${equippedItem.name}' as a tool.`);
+                    // Maybe play a different sound?
+                } else {
+                    console.log("Cannot use tool, nothing equipped.");
+                    // Play an 'empty hand' sound?
+                }
+            } else {
+                // console.log("Action on cooldown"); // Optional: feedback for cooldown
+            }
+        } // End Tool Usage
+
+        // --- Handle Item Pickup ---
+        this.handleItemPickup();
+
+        // --- Handle Item Drop ---
+        if (this.inputHandler.dropItemPressed) {
+            const droppedItemId = this.player.dropEquippedItem();
+            if (droppedItemId) {
+                const itemConfig = getItemConfig(droppedItemId);
+                if (itemConfig) {
+                    // Spawn item slightly in front of the player
+                    const dropDistance = 30; // Distance in front
+                    const angle = this.player.rotation - Math.PI / 2; // Adjust rotation
+                    const dropX = this.player.x + Math.cos(angle) * dropDistance;
+                    const dropY = this.player.y + Math.sin(angle) * dropDistance;
+                    
+                    // Use the new reusable method
+                    this.spawnDroppedItem(droppedItemId, dropX, dropY, 1);
+                    
+                    // Potentially trigger save state here? Or rely on manual/periodic save.
+                } else {
+                    // This case should be less likely now since dropEquippedItem ensures it exists
+                    console.error(`Could not find config for dropped item ID: ${droppedItemId}`);
+                }
+            }
+            // No 'else' needed, dropEquippedItem handles 'nothing equipped' case
+        } // End Item Drop
     }
 
-    // --- Tree Destruction and Log Spawning --- 
+    /**
+     * Spawns a dropped item in the world at the specified location.
+     * @param itemId The ID of the item to drop.
+     * @param x World x-coordinate to drop at.
+     * @param y World y-coordinate to drop at.
+     * @param quantity The number of items in the drop.
+     */
+    public spawnDroppedItem(itemId: string, x: number, y: number, quantity: number): void {
+        const itemConfig = getItemConfig(itemId);
+        if (itemConfig) {
+            const droppedItem: DroppedItem = {
+                itemConfig: itemConfig,
+                x: x,
+                y: y,
+                quantity: quantity
+            };
+            this.droppedItems.push(droppedItem);
+            console.log(`Spawned ${quantity} ${itemConfig.name}(s) at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+            this.audioPlayer.play('item-drop');
+        } else {
+            console.error(`Could not find config for dropped item ID: ${itemId}`);
+        }
+    }
+
     private destroyTreeAndSpawnLogs(treeToDestroy: Tree): void {
         console.log(`Destroying fallen tree at (${treeToDestroy.x.toFixed(0)}, ${treeToDestroy.y.toFixed(0)})`);
         const destroyedTreeX = treeToDestroy.x;
@@ -440,55 +459,73 @@ export class GameScene extends Scene {
             console.error("Could not find item config for 'wood_log' to drop!");
         }
     }
-    // --- End Tree Destruction ---
 
-    private handleItemPickup(): void {
-        this.closestPickupItem = null; // Reset closest item each frame
-        let minDistanceSq = this.pickupRange * this.pickupRange;
+    // Calculates the closest item within pickup range for UI prompt
+    private updateClosestPickupItem(): void {
+        let closestDistSq = this.pickupRange * this.pickupRange; // Check squared distance
+        this.closestPickupItem = null; // Reset each frame
 
-        // Find the closest item within pickup range
-        this.droppedItems.forEach(itemDrop => {
-            const dx = itemDrop.x - this.player.x;
-            const dy = itemDrop.y - this.player.y;
-            const distanceSq = dx * dx + dy * dy;
+        for (const item of this.droppedItems) {
+            const dx = this.player.x - item.x;
+            const dy = this.player.y - item.y;
+            const distSq = dx * dx + dy * dy;
 
-            if (distanceSq < minDistanceSq) {
-                minDistanceSq = distanceSq;
-                this.closestPickupItem = itemDrop;
-            }
-        });
-
-        // If an item is close enough and player presses interact key
-        if (this.closestPickupItem && this.inputHandler.interactPressed) {
-            // Assign to local constant to help type inference
-            const itemToPickup = this.closestPickupItem; 
-
-            // Use type assertions to resolve linter errors
-            console.log(`Attempting to pick up ${(itemToPickup as DroppedItem).itemConfig.name}`);
-            // Attempt to add to player inventory
-            const success = this.player.addItem((itemToPickup as DroppedItem).itemConfig.id, (itemToPickup as DroppedItem).quantity);
-
-            if (success) {
-                console.log("Item picked up successfully.");
-                // Remove item from the world
-                this.droppedItems = this.droppedItems.filter(item => item !== itemToPickup);
-                this.closestPickupItem = null; // Clear reference after pickup
-            } else {
-                console.log("Failed to pick up item (inventory full or other issue).");
-                // Optional: Provide feedback to player (e.g., flash inventory UI?)
+            if (distSq < closestDistSq) {
+                closestDistSq = distSq;
+                this.closestPickupItem = item;
             }
         }
     }
 
-    private handleCreativeModeInput(selectedObjectType: PlaceableObjectType): void {
-        // Placement logic
-        if (this.inputHandler.mouseClicked) {
-            this.placeObjectAt(this.inputHandler.mousePosition.x, this.inputHandler.mousePosition.y, selectedObjectType);
+    // Handles actually picking up an item when Interact is pressed
+    private handleItemPickup(): void {
+        if (this.inputHandler.interactPressed && this.closestPickupItem) {
+            // Attempt to add to player inventory
+            const success = this.player.addItem(this.closestPickupItem.itemConfig.id, this.closestPickupItem.quantity);
+            if (success) {
+                // Remove from world
+                const index = this.droppedItems.indexOf(this.closestPickupItem);
+                if (index > -1) {
+                    this.droppedItems.splice(index, 1);
+                    console.log(`Picked up ${this.closestPickupItem.itemConfig.name}`);
+                    // Play pickup sound
+                    this.audioPlayer.play('pickup'); // Assume 'pickup.mp3' exists and is loaded
+                    this.closestPickupItem = null; // Clear the prompt
+                }
+            } else {
+                console.log(`Inventory full, cannot pick up ${this.closestPickupItem.itemConfig.name}`);
+                // Optional: Play a 'cannot pickup' sound or show message
+            }
         }
+    }
 
-        // Removal logic
-        if (this.inputHandler.deletePressed) {
-            this.removeObjectAt(this.inputHandler.mousePosition.x, this.inputHandler.mousePosition.y, this.staticObjects);
+    // Handles placing/removing objects in creative mode
+    private handleCreativeModeInput(selectedObjectType: PlaceableObjectType): void {
+        if (this.inputHandler.mouseClicked) {
+            // Determine action based on selected type or if hovering over existing object
+            const mouseWorldX = this.inputHandler.mousePosition.x;
+            const mouseWorldY = this.inputHandler.mousePosition.y;
+
+            // Check if clicking on an existing object to potentially remove
+            let clickedExisting = false;
+            for (const obj of this.staticObjects) {
+                 // A simple bounding box check is sufficient here
+                 if (mouseWorldX >= obj.x - obj.width / 2 && mouseWorldX <= obj.x + obj.width / 2 &&
+                     mouseWorldY >= obj.y - obj.height / 2 && mouseWorldY <= obj.y + obj.height / 2) {
+                     clickedExisting = true;
+                     // If delete key is held, remove it (basic removal)
+                     if (this.inputHandler.deletePressed) {
+                         this.removeObjectAt(obj.x, obj.y, this.staticObjects);
+                     }
+                     // Add other creative interactions later (e.g., selection, modification)
+                     break;
+                 }
+            }
+
+            // If not clicking an existing object, place the selected object type
+            if (!clickedExisting && selectedObjectType) {
+                this.placeObjectAt(mouseWorldX, mouseWorldY, selectedObjectType);
+            }
         }
     }
 

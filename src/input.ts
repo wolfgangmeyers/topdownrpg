@@ -17,6 +17,8 @@ export class InputHandler {
     public loadKeyPressed: boolean = false;
     public useToolPressed: boolean = false; // Flag for tool usage (left click in gameplay)
     public interactPressed: boolean = false; // Flag for interaction key (E)
+    public dropItemPressed: boolean = false; // Flag for dropping item (G)
+    public uiDropActionClicked: boolean = false; // Flag for Shift+Click on UI
 
     private renderer: Renderer | null = null; // Add renderer reference
 
@@ -73,6 +75,10 @@ export class InputHandler {
             if (lowerCaseKey === 'e') {
                 this.interactPressed = true;
             }
+            // Check for Drop Item key (using lowercase)
+            if (lowerCaseKey === 'g') {
+                this.dropItemPressed = true;
+            }
         });
 
         window.addEventListener('keyup', (e) => {
@@ -86,6 +92,8 @@ export class InputHandler {
             this.loadKeyPressed = false; // Reset load key flag
             this.useToolPressed = false; // Reset tool usage flag
             this.interactPressed = false; // Reset interact flag
+            this.dropItemPressed = false; // Reset drop item flag
+            this.uiDropActionClicked = false; // Reset UI drop action flag
             // Note: deletePressed is reset on keyup, might need adjustment based on usage
         });
 
@@ -111,8 +119,15 @@ export class InputHandler {
         canvas.addEventListener('mousedown', (e) => {
             // Check for left click (button 0)
             if (e.button === 0) {
-                this.mouseClicked = true; // For world
-                this.uiMouseClicked = true; // For UI
+                // Check if shift key is also pressed for UI drop action
+                if (e.shiftKey) {
+                    this.uiDropActionClicked = true; 
+                    this.uiMouseClicked = false; // Ensure regular UI click is not set
+                    this.mouseClicked = false; // Ensure world click is not set
+                } else {
+                    this.mouseClicked = true; // For world
+                    this.uiMouseClicked = true; // For UI equip/select
+                }
                 // Set useToolPressed here as well (logic in Game/Scene will check creative mode)
                 this.useToolPressed = true; 
             }
@@ -140,6 +155,8 @@ export class InputHandler {
         this.loadKeyPressed = false; // Reset load key flag
         this.useToolPressed = false; // Reset tool usage flag
         this.interactPressed = false; // Reset interact flag
+        this.dropItemPressed = false; // Reset drop item flag
+        this.uiDropActionClicked = false; // Reset UI drop action flag
         // Note: deletePressed is reset on keyup, might need adjustment based on usage
     }
 

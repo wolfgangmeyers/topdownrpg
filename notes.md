@@ -26,7 +26,7 @@ This file captures key decisions, techniques, and context from the development s
     *   `Player` (`player.ts`): Stores position, dimensions, speed, rotation (0 rad = up). Moves via WASD/Arrows, rotates to face mouse. Now includes `inventory` (`Map<string, InventorySlot>`), `equippedItemId` (`string | null`), and methods for item management (`addItem`, `removeItem`, `equipItem`, `unequipItem`, `getEquippedItem`). Also includes animation state (`isSwinging`, `swingTimer`, etc.) and methods (`startSwing`, `getSwingAngleOffset`) for the tool swing animation.
     *   Static Objects (`Tree`, `House`): Managed in `GameScene.staticObjects` array.
         *   `Tree`: Now has `maxHealth`, `currentHealth`, and `state` (`'STANDING'` | `'FALLING'`). `takeDamage` method updates health but doesn't directly signal destruction.
-*   **Input:** `InputHandler` (`input.ts`) captures keyboard/mouse events. Translates mouse coordinates to both world (`mousePosition`) and screen (`mouseScreenPosition`). Provides state flags for single-frame actions (`useToolPressed`, `interactPressed`, `uiMouseClicked`, etc.) reset via `resetFrameState`.
+*   **Input:** `InputHandler` (`input.ts`) captures keyboard/mouse events. Translates mouse coordinates to both world (`mousePosition`) and screen (`mouseScreenPosition`). Provides state flags for single-frame actions (`useToolPressed`, `interactPressed`, `uiMouseClicked`, etc.) reset via `resetFrameState`. Stores/checks key presses in lowercase for case-insensitivity (e.g., WASD movement works with Caps Lock).
 *   **Collision:** Simple AABB collision detection (`checkCollision` in `GameScene`) implemented between player and `staticObjects`. Player movement collision ignores trees in `'FALLING'` state. Tool usage (axe) uses hitbox collision check against standing trees.
 *   **Item System (`item.ts`):** Defines `ItemType` enum, `Item` interface, and `ITEM_CONFIG` map for defining item properties (Axe, Wood Log implemented).
 *   **Dropped Items (`scene.ts`):** `DroppedItem` interface defined. `GameScene` manages `droppedItems: DroppedItem[]` list for items on the ground.
@@ -53,6 +53,8 @@ This file captures key decisions, techniques, and context from the development s
 *   **Equipping via UI:**
     *   Clicking on an inventory slot (`uiMouseClicked` in `InputHandler`) triggers `Game.handleInventoryClick`.
     *   Logic calculates the clicked slot index, finds the corresponding item ID in the player's inventory, and calls `Player.equipItem`.
+*   **Visual Feedback:**
+    *   Implemented health bar display using `Renderer.drawHealthBar`. Bar appears above damaged, standing trees.
 
 ## Persistence
 
@@ -69,7 +71,6 @@ This file captures key decisions, techniques, and context from the development s
 *   No visual feedback for falling trees (they just disappear after delay). Needs animation/tweening.
 *   No way to drop items *from* inventory yet.
 *   Limited item types (Axe, Wood Log).
-*   Tree health bar not implemented yet.
 *   Swing animation is very basic (simple rotation).
 *   No sound for item pickup.
 *   Creative mode probably doesn't save/load tree health correctly (uses simpler save format). 
