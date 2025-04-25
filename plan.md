@@ -73,6 +73,7 @@ This document outlines the plan for creating a web-based, top-down action RPG us
     *   Implement item pickup logic (collision detection, adding to inventory, removing from world).
     *   Create an inventory screen UI in `ui.ts` (toggle with `I` key).
     *   Display inventory items in the UI.
+    *   Implement item dropping logic (e.g., 'G' key for equipped item, Shift+Click on inventory slot).
 
 ## 6. Combat System (Basic) - Phase 4
 

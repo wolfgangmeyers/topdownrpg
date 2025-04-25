@@ -30,9 +30,10 @@ The architecture is component-based, centered around a main `Game` class that ma
         *   Manages lists of world objects (`staticObjects`: Trees, Houses) and items on the ground (`droppedItems`).
         *   Stores world dimensions (`worldWidth`, `worldHeight`).
         *   `load()`: Loads scene-specific assets and attempts to load layout state (including tree health, dropped items) from IndexedDB via `loadState()`. Populates defaults if no saved state.
-        *   `update()`: Handles game logic based on mode (Gameplay vs. Creative). Updates player, checks collisions (ignoring falling trees), updates camera, handles creative object placement/removal. Handles tool usage (`handleGameplayInput` -> Axe swing, hitbox check, tree damage, trigger sounds/animation), item pickup (`handleItemPickup` -> proximity check, trigger pickup), and timed tree destruction (`setTimeout`, `destroyTreeAndSpawnLogs`).
+        *   `update()`: Handles game logic based on mode (Gameplay vs. Creative). Updates player, checks collisions (ignoring falling trees), updates camera, handles creative object placement/removal. Handles tool usage (`handleGameplayInput` -> Axe swing, hitbox check, tree damage, trigger sounds/animation), item pickup (`handleItemPickup` -> proximity check, trigger pickup), item dropping (`handleGameplayInput` -> checks `dropItemPressed`, calls `player.dropEquippedItem`, calls `spawnDroppedItem`), and timed tree destruction (`setTimeout`, `destroyTreeAndSpawnLogs`).
         *   `draw()`: Renders the scene content (background, static objects, dropped items, player, equipped item animation) using the `Renderer`, applying camera transformations. Renders creative mode UI overlay, item pickup prompts, and tree health bars.
         *   `saveState()`/`loadState()`: Asynchronous methods using `db.ts` helpers to persist/retrieve `staticObjects` (including tree health) and `droppedItems` layout to/from IndexedDB, keyed by `sceneId`.
+        *   `spawnDroppedItem()`: Reusable method to create a `DroppedItem` entity, add it to the `droppedItems` list, and play the drop sound.
 *   **`renderer.ts`**: Canvas rendering abstraction.
     *   Holds the canvas context (`ctx`).
     *   Manages viewport size and camera coordinates (`cameraX`, `cameraY`).
@@ -41,7 +42,8 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Handles canvas resizing.
 *   **`input.ts`**: Input handling.
     *   `InputHandler` class attaches listeners for `keydown`, `keyup`, `mousemove`, `mousedown`.
-    *   Tracks pressed keys (`Set<string>`, lowercase for case-insensitivity), mouse position (world: `mousePosition`, screen: `mouseScreenPosition`), single-frame flags (`useToolPressed`, `interactPressed`, `uiMouseClicked`, etc.).
+    *   Tracks pressed keys (`Set<string>`, lowercase for case-insensitivity), mouse position (world: `mousePosition`, screen: `mouseScreenPosition`), single-frame flags (`useToolPressed`, `interactPressed`, `uiMouseClicked`, `dropItemPressed`, `uiDropActionClicked`, etc.).
+    *   Detects Shift+Click on the canvas to set `uiDropActionClicked` instead of `uiMouseClicked`.
     *   Provides methods to query input state (`isKeyPressed`, `getMovementDirection`).
     *   Resets single-frame flags each update (`resetFrameState`).
     *   Requires `Renderer` reference for coordinate conversion.
@@ -59,7 +61,7 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Stores animation state: `isSwinging`, timers, etc.
     *   `move()` method applies movement based on dx/dy.
     *   `update()` calculates rotation based on mouse position, updates swing animation timer.
-    *   Provides inventory methods: `addItem`, `removeItem`, `equipItem`, `unequipItem`, `getEquippedItem`.
+    *   Provides inventory methods: `addItem`, `removeItem`, `equipItem`, `unequipItem`, `getEquippedItem`, `dropEquippedItem`, `dropItemById`.
     *   Provides animation methods: `startSwing`, `getSwingAngleOffset`.
 *   **`tree.ts`, `house.ts`**: Static object entities.
     *   `Tree`: Stores `x`, `y`, `width`, `height`, `svgPath`, `maxHealth`, `currentHealth`, `state` ('STANDING'/'FALLING'). Includes `takeDamage` method.
@@ -74,7 +76,7 @@ The architecture is component-based, centered around a main `Game` class that ma
 ## 3. Data Flow & State
 
 *   **Initialization:** `main.ts` -> `Game` (creates Renderer, Input, Assets, Audio) -> `Game.init` -> `AudioPlayer.loadSound` -> `loadPlayerData` (localStorage) -> Create `Player` -> Restore Player inventory/equip state (from save data or defaults) -> Create `GameScene` (passing core systems) -> `GameScene.load` -> `AssetLoader.loadImages` -> `loadSceneState` (IndexedDB) -> Populate `staticObjects` & `droppedItems` -> Game loop starts.
-*   **Update Cycle:** `Game.update` -> `InputHandler` check (tool use, interact, UI clicks, etc.) -> `Game.handleInventoryClick` (if UI click) -> `Scene.update` -> (`handleGameplayInput` -> Player/Tool actions -> Tree damage/state change -> Trigger sounds/animation -> Schedule destruction; `handleItemPickup`) -> `Player.update` (movement, rotation, animation timer) -> `InputHandler.resetFrameState`.
+*   **Update Cycle:** `Game.update` -> `InputHandler` check (tool use, interact, UI clicks/Shift+Clicks, drop item key, etc.) -> `Game.handleInventoryClick` (if UI click/drop action) -> (Player equip OR Player drop + Scene spawn) -> `Scene.update` -> (`handleGameplayInput` -> Player/Tool actions -> Tree damage/state change -> Trigger sounds/animation -> Schedule destruction; `handleItemPickup`; Handle `dropItemPressed` -> Player drop equipped + Scene spawn) -> `Player.update` (movement, rotation, animation timer) -> `InputHandler.resetFrameState`.
 *   **Draw Cycle:** `Game.draw` -> `Scene.draw` -> `Renderer.clear` -> `Renderer.translate` (camera) -> `Renderer` draw calls for world elements (background, static objects, dropped items, player, equipped item with animation) -> `Renderer` draw calls for overlays (pickup prompts, creative mode UI) -> `Renderer.restore` -> `Game.draw` -> `Renderer.drawInventoryUI`.
 *   **State Location:**
     *   Global Game State: `Game` class.
@@ -94,7 +96,7 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **Asynchronous Operations:** Asset/sound loading and IndexedDB operations use `async`/`await`.
 *   **Dual Persistence:** IndexedDB for scene layout, `localStorage` for player progress.
 *   **State Management:** Game state distributed across `Game`, `Scene`, `Player`, `Tree` etc.
-*   **Input Handling:** Single-frame flags for actions (`useToolPressed`, `interactPressed`, etc.).
+*   **Input Handling:** Single-frame flags for actions (`useToolPressed`, `interactPressed`, `dropItemPressed`, etc.). Separate `uiMouseClicked` (equip) and `uiDropActionClicked` (drop) for inventory interaction.
 *   **Simple State Machine:** Tree uses `STANDING`/`FALLING` states.
 *   **Delayed Actions:** Using `setTimeout` for tree destruction effects.
-*   **UI Interaction Handling:** Separating world clicks (`mouseClicked`) from UI clicks (`uiMouseClicked`) and handling inventory clicks in `Game`. 
+*   **UI Interaction Handling:** Separating world clicks (`mouseClicked`) from UI clicks (`uiMouseClicked`, `uiDropActionClicked`) and handling inventory actions in `Game.handleInventoryClick`. 

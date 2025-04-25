@@ -73,4 +73,22 @@ This file captures key decisions, techniques, and context from the development s
 *   Limited item types (Axe, Wood Log).
 *   Swing animation is very basic (simple rotation).
 *   No sound for item pickup.
-*   Creative mode probably doesn't save/load tree health correctly (uses simpler save format). 
+*   Creative mode probably doesn't save/load tree health correctly (uses simpler save format).
+
+## Feature: Item Dropping (Implemented)
+
+*   **Mechanics:** Allows the player to drop items from their inventory onto the ground.
+    *   **Dropping Equipped Item:** Pressing the 'G' key drops the currently equipped item.
+        *   `InputHandler` sets `dropItemPressed` flag.
+        *   `GameScene.handleGameplayInput` checks the flag, calls `player.dropEquippedItem()`.
+        *   `Player.dropEquippedItem()` calls `removeItem(equippedItemId, 1)` (which also handles unequipping if the stack is emptied) and returns the `itemId`.
+        *   `GameScene` calls `spawnDroppedItem` to create the item entity in the world near the player.
+    *   **Dropping from Inventory UI:** Holding Shift and clicking an inventory slot drops one item from that stack.
+        *   `InputHandler` mousedown listener checks for `e.shiftKey` and sets `uiDropActionClicked` flag (instead of `uiMouseClicked`).
+        *   `Game.update` checks for *either* `uiMouseClicked` or `uiDropActionClicked` before calling `handleInventoryClick`.
+        *   `Game.handleInventoryClick` detects `uiDropActionClicked`, calculates the clicked slot/item ID, calls `player.dropItemById(itemId, 1)`.
+        *   `Player.dropItemById()` simply calls `removeItem(itemId, 1)`.
+        *   If `dropItemById` succeeds, `Game.handleInventoryClick` calls `scene.spawnDroppedItem` to create the item entity near the player.
+*   **Refactoring:** Item spawning logic was extracted into `GameScene.spawnDroppedItem(itemId, x, y, quantity)` for reuse by both drop mechanisms.
+*   **Audio:** An `item-drop` sound (loaded as `/assets/audio/drop.mp3`) is played by `spawnDroppedItem`.
+*   **Persistence:** Dropped items are already saved/loaded as part of the `GameScene` state persistence via IndexedDB (`droppedItems` array in `SavedSceneState`). 
