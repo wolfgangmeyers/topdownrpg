@@ -33,13 +33,26 @@ export class Renderer {
 
     // Updated drawBackground: Assumes camera transform is already applied.
     // Draws the pattern covering the entire specified world dimensions.
-    public drawBackground(pattern: CanvasPattern | null, worldWidth: number, worldHeight: number): void {
-        if (!pattern) return;
-        // No internal save/restore/translate needed here
-        this.ctx.fillStyle = pattern;
-        // Fill the entire world area (relative to the translated origin 0,0)
-        this.ctx.fillRect(0, 0, worldWidth, worldHeight); 
+    // Removed: drawBackground
+    // public drawBackground(pattern: CanvasPattern | null, worldWidth: number, worldHeight: number): void { ... }
+
+    // --- New: Draw Tile --- 
+    /**
+     * Draws a single tile image at a specific screen location.
+     * Assumes the image asset is already loaded.
+     * Assumes camera transform is ALREADY applied if drawing relative to world.
+     * @param image The HTMLImageElement for the tile.
+     * @param x The top-left screen x-coordinate to draw the tile at.
+     * @param y The top-left screen y-coordinate to draw the tile at.
+     * @param tileSize The width and height of the tile.
+     */
+    public drawTile(image: HTMLImageElement, x: number, y: number, tileSize: number): void {
+        // Simple drawing at the specified location and size
+        // Draw slightly larger (e.g., by 1 pixel) to cover potential gaps
+        const overlap = 1;
+        this.ctx.drawImage(image, x, y, tileSize + overlap, tileSize + overlap);
     }
+    // --- End: Draw Tile ---
 
     // Example draw method (will be expanded)
     public drawPlaceholder(x: number, y: number, color: string = 'red'): void {
@@ -252,4 +265,41 @@ export class Renderer {
         this.ctx.restore();
     }
     // --- End Draw Inventory UI ---
+
+    // --- REMOVED drawCreativePanel --- 
+    // Logic moved to ui/creativeModeSelector.ts
+    // public drawCreativePanel(...) { ... }
+
+    // --- New Method: Draw Debug Rectangle Outline (World Coords) ---
+    /**
+     * Draws a rectangle outline for debugging purposes at world coordinates.
+     * Assumes the input box uses center coordinates.
+     */
+    drawDebugRect(box: { x: number, y: number, width: number, height: number }, color: string): void {
+        if (!this.ctx) return;
+
+        const halfWidth = box.width / 2;
+        const halfHeight = box.height / 2;
+        
+        // Calculate top-left corner in world coordinates
+        const worldX = box.x - halfWidth;
+        const worldY = box.y - halfHeight;
+
+        // Convert top-left corner to screen coordinates using the camera
+        // REMOVED: The context is already translated by the caller (SceneRenderer)
+        // const screenX = worldX - this.cameraX;
+        // const screenY = worldY - this.cameraY;
+
+        // Set drawing style
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([3, 3]); // Dashed line for debug
+
+        // Draw the rectangle outline at world coordinates (context is translated)
+        this.ctx.strokeRect(worldX, worldY, box.width, box.height);
+
+        // Reset line dash
+        this.ctx.setLineDash([]); 
+    }
+    // --- End New Method ---
 } 

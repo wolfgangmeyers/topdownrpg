@@ -12,7 +12,6 @@ export class InputHandler {
     public uiMouseClicked: boolean = false; // For UI interactions
     public toggleCreativeModePressed: boolean = false;
     public deletePressed: boolean = false;
-    public placeableSelectionKeyPressed: string | null = null; // e.g., '1', '2'
     public saveKeyPressed: boolean = false;
     public loadKeyPressed: boolean = false;
     public useToolPressed: boolean = false; // Flag for tool usage (left click in gameplay)
@@ -57,10 +56,6 @@ export class InputHandler {
             // Check for creative mode toggle press (using lowercase)
             if (lowerCaseKey === 'c') {
                 this.toggleCreativeModePressed = true;
-            }
-            // Check for placeable selection keys (using original key for digits)
-            if (e.key === '1' || e.key === '2') {
-                this.placeableSelectionKeyPressed = e.key;
             }
             // Check for Save/Load keys (using original key for F-keys)
             if (e.key === 'F5') {
@@ -122,14 +117,16 @@ export class InputHandler {
                 // Check if shift key is also pressed for UI drop action
                 if (e.shiftKey) {
                     this.uiDropActionClicked = true; 
-                    this.uiMouseClicked = false; // Ensure regular UI click is not set
-                    this.mouseClicked = false; // Ensure world click is not set
+                    // Ensure other click flags are not set for shift+click
+                    this.uiMouseClicked = false; 
+                    this.mouseClicked = false; 
+                    this.useToolPressed = false;
                 } else {
-                    this.mouseClicked = true; // For world
-                    this.uiMouseClicked = true; // For UI equip/select
+                    // Set flags for potential world AND UI interaction
+                    this.mouseClicked = true; 
+                    this.uiMouseClicked = true; 
+                    this.useToolPressed = true; 
                 }
-                // Set useToolPressed here as well (logic in Game/Scene will check creative mode)
-                this.useToolPressed = true; 
             }
             // Prevent default browser behavior if needed
             // e.preventDefault(); 
@@ -145,12 +142,21 @@ export class InputHandler {
         */
     }
 
+    /**
+     * Consumes the world click flag for this frame. Call this after a UI element
+     * successfully handles a click to prevent world interaction.
+     */
+    public consumeClick(): void {
+        // console.log("Click consumed by UI."); // Debugging log
+        this.mouseClicked = false;
+        this.useToolPressed = false; // Also consume tool usage if UI was clicked
+    }
+
     // Call this at the end of each update loop to reset single-frame flags
     public resetFrameState(): void {
         this.mouseClicked = false;
         this.uiMouseClicked = false; // Reset UI click flag
         this.toggleCreativeModePressed = false;
-        this.placeableSelectionKeyPressed = null; // Reset selection key
         this.saveKeyPressed = false; // Reset save key flag
         this.loadKeyPressed = false; // Reset load key flag
         this.useToolPressed = false; // Reset tool usage flag

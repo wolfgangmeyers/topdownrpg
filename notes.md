@@ -13,67 +13,107 @@ This file captures key decisions, techniques, and context from the development s
 ## Core Mechanics & Rendering
 
 *   **Game Loop:** Standard `requestAnimationFrame` loop managed in `main.ts`, driven by `Game` class.
-*   **Rendering:** `Renderer` class (`renderer.ts`) encapsulates all Canvas 2D drawing. Clears canvas, applies camera transforms, draws images/patterns/text/UI elements.
-*   **Coordinate System:** Distinction between fixed **World Coordinates** (used for game logic, object positions) and **Screen Coordinates** (used for UI fixed to the viewport, like inventory).
-*   **Camera:** Managed by `Renderer` (`cameraX`, `cameraY`). `GameScene` updates the camera position in its `update` loop to follow the player, clamped to world boundaries (`worldWidth`, `worldHeight`). Camera translation (`ctx.translate(-cameraX, -cameraY)`) is applied before drawing world elements.
-*   **Assets:** SVGs (`public/assets/svg/`) loaded asynchronously via `AssetLoader` (`assets.ts`) into `HTMLImageElement` cache. Ground uses a repeating SVG pattern defined in `ground-pattern.svg`, drawn by `Renderer.drawBackground` covering the world area. Audio files (`.mp3`) are loaded via `AudioPlayer`.
-*   **Audio:** `AudioPlayer` class (`audio.ts`) handles loading (`loadSound`) and playing (`play`) sounds using the Web Audio API. Requires context resuming via user interaction (handled in `Game` constructor).
+*   **Rendering:** `Renderer` class (`renderer.ts`) encapsulates low-level Canvas 2D drawing primitives. `SceneRenderer` (`sceneRenderer.ts`) handles drawing the actual game world (terrain, objects, player, etc.) using the `Renderer`.
+*   **Coordinate System:** Distinction between fixed **World Coordinates** and **Screen Coordinates**.
+*   **Camera:** Managed by `SceneRenderer` (`updateCamera`), which updates coordinates in the core `Renderer` (`cameraX`, `cameraY`). Follows the player, clamped to world boundaries.
+*   **Assets:** SVGs loaded via `AssetLoader`. Audio files loaded via `AudioPlayer`.
+*   **Audio:** `AudioPlayer` manages sounds via Web Audio API. Context resuming handled in `Game` constructor.
 
-## Game Structure
+## Game Structure & Refactoring
 
-*   **Scenes:** Abstract `Scene` class with concrete `GameScene` (`scene.ts`). `Game` class holds the `currentScene`. Scenes manage their own objects, update/draw logic, world boundaries, and persistence. `Scene` constructor now requires `AudioPlayer`.
+*   **Scenes:** Abstract `Scene` class with concrete `GameScene` (`scene.ts`). `Game` class holds the `currentScene`.
+*   **`GameScene` Refactoring (Major Change):** To improve maintainability and separation of concerns, the large `GameScene` class was refactored. Its responsibilities are now delegated to several specialized classes:
+    *   **`EntityManager` (`entityManager.ts`):** Manages static objects (`Tree`, `House`) and `droppedItems`. Handles adding, removing, querying entities, spawning items, and tree destruction logic.
+    *   **`TerrainManager` (`terrainManager.ts`):** Manages the `terrainGrid`, tile data, walkability checks, and terrain placement.
+    *   **`SceneStateManager` (`sceneStateManager.ts`):** Handles saving/loading scene state (objects, items, terrain) to/from IndexedDB.
+    *   **`GameplayController` (`gameplayController.ts`):** Handles input processing and game logic updates specific to the *gameplay* mode (movement, collision, tool use, item pickup/drop).
+    *   **`CreativeController` (`creativeController.ts`):** Handles input processing and logic updates specific to *creative* mode (object/terrain/item placement and removal).
+    *   **`SceneRenderer` (`sceneRenderer.ts`):** Handles all drawing of world-space elements (terrain, objects, items, player, overlays, etc.) using the core `Renderer`.
+    *   `GameScene` now acts primarily as a coordinator, holding instances of these managers/controllers and delegating tasks.
 *   **Game Objects:**
-    *   `Player` (`player.ts`): Stores position, dimensions, speed, rotation (0 rad = up). Moves via WASD/Arrows, rotates to face mouse. Now includes `inventory` (`Map<string, InventorySlot>`), `equippedItemId` (`string | null`), and methods for item management (`addItem`, `removeItem`, `equipItem`, `unequipItem`, `getEquippedItem`). Also includes animation state (`isSwinging`, `swingTimer`, etc.) and methods (`startSwing`, `getSwingAngleOffset`) for the tool swing animation.
-    *   Static Objects (`Tree`, `House`): Managed in `GameScene.staticObjects` array.
-        *   `Tree`: Now has `maxHealth`, `currentHealth`, and `state` (`'STANDING'` | `'FALLING'`). `takeDamage` method updates health but doesn't directly signal destruction.
-*   **Input:** `InputHandler` (`input.ts`) captures keyboard/mouse events. Translates mouse coordinates to both world (`mousePosition`) and screen (`mouseScreenPosition`). Provides state flags for single-frame actions (`useToolPressed`, `interactPressed`, `uiMouseClicked`, etc.) reset via `resetFrameState`. Stores/checks key presses in lowercase for case-insensitivity (e.g., WASD movement works with Caps Lock).
-*   **Collision:** Simple AABB collision detection (`checkCollision` in `GameScene`) implemented between player and `staticObjects`. Player movement collision ignores trees in `'FALLING'` state. Tool usage (axe) uses hitbox collision check against standing trees.
-*   **Item System (`item.ts`):** Defines `ItemType` enum, `Item` interface, and `ITEM_CONFIG` map for defining item properties (Axe, Wood Log implemented).
-*   **Dropped Items (`scene.ts`):** `DroppedItem` interface defined. `GameScene` manages `droppedItems: DroppedItem[]` list for items on the ground.
+    *   `Player` (`player.ts`): Position, stats, inventory, equipped item, animation state/methods.
+    *   Static Objects (`Tree`, `House`): Now managed by `EntityManager`. Tree health/state handled within `Tree` class, destruction/spawning handled by `EntityManager`.
+*   **Input:** `InputHandler` (`input.ts`) captures events, manages flags, provides coordinate translation. Input state is read by `GameplayController` and `CreativeController`.
+*   **Collision:**
+    *   Player-Object collision checked in `GameplayController` against `EntityManager` data.
+    *   Tool-Object collision checked in `GameplayController`.
+    *   Terrain walkability checked in `GameplayController` via `TerrainManager.isWalkable`.
+    *   AABB helper (`checkCollision`) now static in `EntityManager`.
+*   **Item System (`item.ts`):** Defines item types and configurations.
+*   **Dropped Items (`droppedItem.ts`):** Interface defined. Managed by `EntityManager`, rendered by `SceneRenderer`.
+*   **Terrain System (`terrain.ts`):** Defines terrain types and configurations. Grid managed by `TerrainManager`, rendered by `SceneRenderer`.
 
-## Feature: Axe, Tree Chopping & Inventory (Implemented)
+## Feature: Axe, Tree Chopping & Inventory
 
 *   **Axe & Chopping:**
-    *   Player starts with an Axe equipped (handled in `Game.init`).
-    *   Left-clicking (outside creative mode) triggers `useToolPressed` in `InputHandler`.
-    *   `GameScene.handleGameplayInput` checks cooldown (`actionCooldown`), equipped item ('axe'), calculates an `axeHitbox` based on player rotation, and checks for collision with `STANDING` trees.
-    *   On hit: `axe-hit` sound plays, `Tree.takeDamage` is called, `Player.startSwing` is called.
-    *   If tree health drops <= 0: Tree `state` becomes `'FALLING'`, `tree-fall` sound plays, `destroyTreeAndSpawnLogs` is scheduled using `setTimeout` (1s delay). Falling trees are ignored for collision/targeting.
-    *   `destroyTreeAndSpawnLogs`: Removes the tree object, spawns a `DroppedItem` ('wood_log') at the tree's location, adds it to `GameScene.droppedItems`.
-    *   On miss (or hitting non-standing tree): `axe-miss` sound plays, `Player.startSwing` is called.
+    *   Handled by `GameplayController`.
+    *   Checks cooldown, equipped item, calculates hitbox, checks collision via `EntityManager`.
+    *   On hit: Plays sound (`AudioPlayer`), calls `Tree.takeDamage`, triggers `Player` animation.
+    *   If tree health drops <= 0: Tree state updated, sound played, `EntityManager.destroyTreeAndSpawnLogs` scheduled via `setTimeout`.
 *   **Item Pickup:**
-    *   `GameScene.handleItemPickup` checks for the closest `DroppedItem` within `pickupRange` of the player.
-    *   If an item is close, `Renderer.drawPickupPrompt` displays "E - Pick up [Item Name]".
-    *   Pressing 'E' (`interactPressed` flag in `InputHandler`) triggers pickup attempt.
-    *   `Player.addItem` is called; if successful, the item is removed from `GameScene.droppedItems`.
+    *   Proximity check and closest item tracked in `GameplayController`.
+    *   Prompt drawn by `SceneRenderer` based on info from `GameplayController`.
+    *   Pickup action (`E` key) handled by `GameplayController`, calls `Player.addItem`, removes item via `EntityManager.removeDroppedItem`.
 *   **Inventory UI:**
-    *   Persistently drawn at the bottom-center of the screen by `Renderer.drawInventoryUI` (called from `Game.draw`).
-    *   Displays item icons and quantities (for stackable items > 1).
-    *   Highlights the currently equipped item with a yellow border.
+    *   Drawn by core `Renderer.drawInventoryUI` (called from `Game.draw`).
 *   **Equipping via UI:**
-    *   Clicking on an inventory slot (`uiMouseClicked` in `InputHandler`) triggers `Game.handleInventoryClick`.
-    *   Logic calculates the clicked slot index, finds the corresponding item ID in the player's inventory, and calls `Player.equipItem`.
+    *   Click detection and slot calculation in `Game.handleInventoryClick`.
+    *   Calls `Player.equipItem`. Consumes click via `InputHandler`.
 *   **Visual Feedback:**
-    *   Implemented health bar display using `Renderer.drawHealthBar`. Bar appears above damaged, standing trees.
+    *   Health bars drawn by `SceneRenderer` over damaged standing trees.
 
 ## Persistence
 
-*   **Scene Layout (IndexedDB):** Saves/loads `staticObjects` (including Tree `currentHealth`) and `droppedItems` (ID, position, quantity). Managed by `GameScene.saveState`/`loadState` and `db.ts`. Trees with <= 0 health are not re-added on load.
-*   **Player Progress (localStorage):** Saves/loads player `currentSceneId`, `position`, `inventory` (as array), and `equippedItemId`. Handled by `savePlayerData`/`loadPlayerData` and restoration logic in `Game.init`.
+*   **Scene Layout (IndexedDB):** Managed by `SceneStateManager`. Saves/loads objects, items, terrain grid via `db.ts`.
+*   **Player Progress (localStorage):** Handled by `Game.savePlayerData`/`loadPlayerData`.
+
+## Feature: Item Dropping
+
+*   **Mechanics:**
+    *   Dropping Equipped Item ('G' key): Handled by `GameplayController`. Calls `Player.dropEquippedItem`, then `EntityManager.spawnDroppedItem`.
+    *   Dropping from Inventory UI (Shift+Click): Handled by `Game.handleInventoryClick`. Calls `Player.dropItemById`, then `GameScene.spawnDroppedItemNearPlayer` (which delegates to `EntityManager`).
+*   **Refactoring:** Item spawning logic centralized in `EntityManager.spawnDroppedItem`.
+*   **Audio:** Drop sound played by `EntityManager.spawnDroppedItem`.
+
+## Feature: Creative Mode Selector & Placement
+
+*   **Mechanics:**
+    *   Toggling Mode ('C' key): Handled in `Game.update`.
+    *   Selector Panel (`ui/creativeModeSelector.ts`): Manages selection state, handles its own clicks (consuming input), draws its panel via `Renderer`.
+    *   Placement/Removal: Handled by `CreativeController`. Reads input state, interacts with `EntityManager` (for objects/items) and `TerrainManager` (for terrain).
+    *   Preview/Highlight: Data provided by `CreativeController`, drawn by `SceneRenderer`.
+
+## Feature: House Entry Detection (Implemented - Part 1: Detection)
+
+*   **Goal:** Allow player to enter placed `House` objects by colliding with the door area.
+*   **Initial Problem:** Standard collision detection (`GameplayController.handleMovement` checking player bounds against `House` bounds) blocked the player before their center could reach the visual door area, preventing a simple overlap check from working reliably.
+*   **Solution Strategy:**
+    1.  **Reduced Collision Box:** Modified the collision check in `GameplayController.handleMovement`. When checking against a `House`, use a slightly shorter bounding box (e.g., `height - 10`, center adjusted) for the actual movement blocking. This allows the player sprite to visually overlap the bottom edge/door area.
+    2.  **Separate Trigger Check:** Implemented a new method `GameplayController.checkDoorEntry()`, called *after* the player's final position is determined in `handleMovement`.
+    3.  **Door Trigger Area:** `checkDoorEntry()` calculates a specific rectangular trigger area (`doorBounds`) roughly corresponding to the visual door, but extended downwards below the house edge to ensure the player's center point enters it reliably.
+    4.  **Detection:** If the player's center (`player.x`, `player.y`) falls within the `doorBounds` in `checkDoorEntry()`, a console message is logged (This is where scene transition logic will be added).
+*   **Debug Visualization:**
+    *   To aid positioning the bounds, debug drawing was added.
+    *   `Renderer` got a `drawDebugRect` method for dashed outlines.
+    *   `SceneRenderer` got a `drawDebugBounds` method, called by `drawScene`.
+    *   `GameScene.draw` now calculates the necessary debug bounds (reduced house collision box - orange, door trigger area - cyan) *only when creative mode is enabled* and passes them to `SceneRenderer`.
+    *   This required moving the bounds calculation out of `GameplayController` (which doesn't run in creative mode) into `GameScene.draw`.
+*   **Tuning:** The door trigger area (`doorBounds` calculation in both `checkDoorEntry` and `GameScene.draw`) required tuning the margins (`doorTopMargin = 15`, `doorBottomMargin = 60`) and horizontal offset (`doorXOffset = 20`) to align well visually and feel responsive.
+*   **Next Step:** Implement the actual scene transition when the door entry is detected.
 
 ## Known Issues / Next Steps (Implied)
 
 *   Only one scene ('defaultForest') implemented.
 *   No transitions between scenes.
-*   No NPCs or interaction system (beyond item pickup).
-*   Collision resolution is basic (stop on contact).
-*   Saving is manual (F5); auto-save could be added.
-*   No visual feedback for falling trees (they just disappear after delay). Needs animation/tweening.
-*   No way to drop items *from* inventory yet.
-*   Limited item types (Axe, Wood Log).
-*   Swing animation is very basic (simple rotation).
+*   No NPCs or advanced interaction system.
+*   Basic collision resolution.
+*   Manual saving ('F5' assumed, though Save key exists); auto-save TBD.
+*   No visual feedback for falling trees (just disappear after delay).
+*   Limited item types.
+*   Basic swing animation.
 *   No sound for item pickup.
 *   Creative mode probably doesn't save/load tree health correctly (uses simpler save format).
+*   No way to drop items *from* inventory yet.
 
 ## Feature: Item Dropping (Implemented)
 
@@ -89,6 +129,26 @@ This file captures key decisions, techniques, and context from the development s
         *   `Game.handleInventoryClick` detects `uiDropActionClicked`, calculates the clicked slot/item ID, calls `player.dropItemById(itemId, 1)`.
         *   `Player.dropItemById()` simply calls `removeItem(itemId, 1)`.
         *   If `dropItemById` succeeds, `Game.handleInventoryClick` calls `scene.spawnDroppedItem` to create the item entity near the player.
-*   **Refactoring:** Item spawning logic was extracted into `GameScene.spawnDroppedItem(itemId, x, y, quantity)` for reuse by both drop mechanisms.
+*   **Refactoring:** 
+    *   Item spawning logic was extracted into `GameScene.spawnDroppedItem(itemId, x, y, quantity)` for reuse by both drop mechanisms.
+    *   Creative mode selection panel logic (state, input handling, drawing) extracted from `Game` and `Renderer` into `ui/creativeModeSelector.ts`.
 *   **Audio:** An `item-drop` sound (loaded as `/assets/audio/drop.mp3`) is played by `spawnDroppedItem`.
-*   **Persistence:** Dropped items are already saved/loaded as part of the `GameScene` state persistence via IndexedDB (`droppedItems` array in `SavedSceneState`). 
+*   **Persistence:** Dropped items are already saved/loaded as part of the `GameScene` state persistence via IndexedDB (`droppedItems` array in `SavedSceneState`).
+*   **UI Click Handling:** UI components (`CreativeModeSelector`, `Game.handleInventoryClick`) now call `InputHandler.consumeClick()` after handling a mouse click within their bounds. This prevents the click from also triggering world interactions (like placing the currently selected creative item) in the same frame.
+
+## Feature: Creative Mode Selector (Implemented)
+
+*   **Mechanics:** Allows the player to select and use creative mode items.
+    *   **Selecting Creative Mode:** Pressing the 'C' key toggles creative mode.
+        *   `InputHandler` sets `creativeModePressed` flag.
+        *   `Game.update` checks the flag and toggles `Game.creativeModeEnabled`.
+    *   **Using Creative Mode:** Creative mode items can be used in the game.
+        *   The selector includes placeable objects (Tree, House), terrain tiles (Grass, Road, Water), and placeable items (Axe).
+        *   Clicking an object/terrain/item in the selector updates the state in `CreativeModeSelector`.
+        *   Clicking in the world (if not consumed by UI) triggers placement in `GameScene.handleCreativeModeInput` based on the selected type: objects are added to `staticObjects`, terrain updates `terrainGrid`, items are added to `droppedItems` via `spawnDroppedItem`.
+        *   The `GameScene.drawCreativeModeOverlay` shows a ghost preview of the selected object/terrain/item.
+*   **Refactoring:** Creative mode selection panel logic (state, input handling, drawing) extracted from `Game` and `Renderer` into `ui/creativeModeSelector.ts`.
+*   **UI:** Creative selector panel is now visually sized to hold at least 2 rows (10 items).
+*   **Audio:** An `item-drop` sound (loaded as `/assets/audio/drop.mp3`) is played by `spawnDroppedItem`.
+*   **Persistence:** Dropped items are already saved/loaded as part of the `GameScene` state persistence via IndexedDB (`droppedItems` array in `SavedSceneState`).
+*   **UI Click Handling:** UI components (`CreativeModeSelector`, `Game.handleInventoryClick`) now call `InputHandler.consumeClick()` after handling a mouse click within their bounds. This prevents the click from also triggering world interactions (like placing the currently selected creative item) in the same frame. 

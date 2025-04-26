@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <!-- Base road color (dark grey) -->
+  <rect width="64" height="64" fill="#444444"/>
+  
+  <!-- Texture elements (lighter grey speckles) -->
+  <circle cx="20" cy="15" r="3" fill="#666666" opacity="0.7"/>
+  <circle cx="50" cy="40" r="2.5" fill="#555555" opacity="0.8"/>
+  <circle cx="10" cy="55" r="3" fill="#666666" opacity="0.7"/>
+  <circle cx="35" cy="5" r="2" fill="#555555" opacity="0.8"/>
+  <circle cx="45" cy="25" r="2.5" fill="#777777" opacity="0.6"/>
+  <circle cx="5" cy="30" r="2" fill="#666666" opacity="0.7"/>
+</svg> 

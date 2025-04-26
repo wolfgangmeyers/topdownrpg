@@ -3,20 +3,13 @@ import { Player } from './player';
 import { InputHandler } from './input';
 import { AssetLoader } from './assets';
 import { Scene, GameScene } from './scene'; // Import Scene classes
-import { Tree } from './tree'; // Import Tree for type info if needed elsewhere
-import { House } from './house'; // Import House
 import { AudioPlayer } from './audio'; // Import AudioPlayer
 // Import items
-import { ITEM_CONFIG } from './item'; 
-// Import NPC later when needed
-// import { NPC } from './npc';
-
-// Define placeable object types
-export type PlaceableObjectType = 'Tree' | 'House';
-export const PLACEABLE_OBJECT_CONFIG: Record<PlaceableObjectType, { assetPath: string }> = {
-    'Tree': { assetPath: '/assets/svg/tree.svg' },
-    'House': { assetPath: '/assets/svg/house.svg' },
-};
+import { ITEM_CONFIG, Item } from './item'; 
+// Import Terrain types for Scene/Player state, but not config
+import { TerrainType } from './terrain';
+// Import the new selector and its types
+import { CreativeModeSelector, PlaceableObjectType } from './ui/creativeModeSelector'; 
 
 // --- Player Save Data --- 
 const PLAYER_SAVE_KEY = 'topdown_playerSave';
@@ -41,9 +34,10 @@ export class Game {
     private player: Player | null = null; // Keep player reference if needed globally
     private currentScene: Scene | null = null;
     private audioPlayer: AudioPlayer; // Add AudioPlayer instance
+    private creativeModeSelector: CreativeModeSelector; // Add the selector instance
     private isLoading: boolean = true; // Flag to check if initial loading is done
-    public creativeModeEnabled: boolean = false; // Add creative mode flag
-    public selectedObjectType: PlaceableObjectType = 'Tree'; // Track selected object
+    public creativeModeEnabled: boolean = false; // Keep this global flag
+
     // private npcs: NPC[] = []; // Keep track of NPCs later
     private lastTimestamp: number = 0;
 
@@ -52,14 +46,16 @@ export class Game {
         this.inputHandler = new InputHandler();
         this.assetLoader = new AssetLoader();
         this.audioPlayer = new AudioPlayer(); // Instantiate AudioPlayer
+        // Instantiate the CreativeModeSelector, passing dependencies
+        this.creativeModeSelector = new CreativeModeSelector(this.renderer, this.inputHandler, this.assetLoader, ITEM_CONFIG);
         this.inputHandler.initialize(canvas, this.renderer);
         // --- Resume Audio Context on User Interaction ---
         // Add a listener to resume audio context on the first click/keypress
-        const resumeAudio = () => {
-            this.audioPlayer.resumeContext();
-            // Remove the listener after the first interaction
+        const resumeAudio = async () => {
+            await this.audioPlayer.resumeContext();
             document.removeEventListener('click', resumeAudio);
             document.removeEventListener('keydown', resumeAudio);
+            console.log("AudioContext Resumed");
         };
         document.addEventListener('click', resumeAudio);
         document.addEventListener('keydown', resumeAudio);
@@ -192,8 +188,15 @@ export class Game {
             }
             // --- End Final Check ---
 
+            // --- Load Creative Mode Assets --- 
+            // Initialization happens in selector constructor, now load assets
+            await this.creativeModeSelector.loadAssets();
+            // --- End Creative Mode Init ---
+
             // Load the initial scene using the determined ID
             // For now, we only have GameScene, use the ID
+            // Pass the player instance (must not be null here)
+            if (!this.player) throw new Error("Player not initialized before scene creation!");
             this.currentScene = new GameScene(initialSceneId, this.renderer, this.inputHandler, this.assetLoader, this.player, this.audioPlayer);
             await this.currentScene.load(); // Load scene-specific assets and populate
 
@@ -218,26 +221,22 @@ export class Game {
         }
     }
 
-    // --- Player State Save/Load ---
+    // --- Player Data Persistence (kept in Game for now) ---
     private savePlayerData(): void {
-        if (!this.player || !this.currentScene) {
-            console.warn('Cannot save player data: Player or Scene not available.');
-            return;
-        }
         try {
-            // Convert Map to a serializable format (e.g., array of [key, value])
-            const inventoryData = Array.from(this.player.inventory.entries()).map(([key, slot]) => {
-                return { id: key, quantity: slot.quantity }; // Only save ID and quantity
-            });
-
+            if (!this.player || !this.currentScene) { // Also check currentScene for sceneId
+                console.error("Cannot save player data: Player or Scene not available.");
+                return;
+            }
+            // Construct save data directly
             const saveData: PlayerSaveData = {
-                currentSceneId: this.currentScene.getId(),
-                position: { x: this.player.x, y: this.player.y },
-                inventory: inventoryData, // Add inventory data
-                equippedItemId: this.player.equippedItemId, // Add equipped item ID
+                 currentSceneId: this.currentScene.getId(),
+                 position: { x: this.player.x, y: this.player.y },
+                 inventory: Array.from(this.player.inventory.entries()).map(([id, slot]) => ({ id, quantity: slot.quantity })), // Serialize inventory
+                 equippedItemId: this.player.equippedItemId
             };
-            localStorage.setItem(PLAYER_SAVE_KEY, JSON.stringify(saveData));
-            console.log('Player data saved.', saveData);
+            localStorage.setItem('playerSaveData', JSON.stringify(saveData));
+            console.log('Player data saved to localStorage.');
         } catch (error) {
             console.error('Failed to save player data:', error);
         }
@@ -245,75 +244,74 @@ export class Game {
 
     private loadPlayerData(): PlayerSaveData | null {
         try {
-            const savedData = localStorage.getItem(PLAYER_SAVE_KEY);
-            if (!savedData) {
+            const savedData = localStorage.getItem('playerSaveData');
+            if (savedData) {
+                const parsedData = JSON.parse(savedData);
+                // Add basic validation
+                if (parsedData && parsedData.position && Array.isArray(parsedData.inventory)) {
+                    console.log('Player data loaded from localStorage.');
+                    return parsedData as PlayerSaveData;
+                } else {
+                     console.warn('Loaded player data has invalid format. Discarding.');
+                     localStorage.removeItem('playerSaveData');
+                     return null;
+                }
+            } else {
+                console.log('No player save data found.');
                 return null;
             }
-            const parsedData: PlayerSaveData = JSON.parse(savedData);
-            // Add more validation later if needed (e.g., check schema)
-            if (parsedData && parsedData.currentSceneId && parsedData.position) {
-                 console.log('Player data loaded from localStorage.', parsedData);
-                 // Data is now returned and restoration happens in init()
-                return parsedData;
-            }
-             console.warn('Loaded player data invalid format.');
-             localStorage.removeItem(PLAYER_SAVE_KEY); // Clear invalid data
-             return null;
         } catch (error) {
             console.error('Failed to load player data:', error);
-            localStorage.removeItem(PLAYER_SAVE_KEY); // Clear potentially corrupt data
+            // Clear potentially corrupt data
+            localStorage.removeItem('playerSaveData');
             return null;
         }
     }
-    // --- End Player State Save/Load ---
+    // --- End Player Data --- 
 
     public update(timestamp: number): void {
-        if (this.isLoading || !this.currentScene) return; // Don't update until ready
+        if (this.isLoading || !this.currentScene || !this.player) return; // Add player check
 
         const deltaTime = (timestamp - (this.lastTimestamp || timestamp)) / 1000; // Delta time in seconds
         this.lastTimestamp = timestamp;
 
-        // Delegate update to the current scene
-        this.currentScene.update(deltaTime, this.creativeModeEnabled, this.selectedObjectType);
+        // Update the creative mode selector first (handles its own input)
+        this.creativeModeSelector.update(this.creativeModeEnabled);
+
+        // Delegate update to the current scene - pass selection state from the selector
+        this.currentScene.update(
+            deltaTime, 
+            this.creativeModeEnabled, 
+            this.creativeModeSelector.selectedObjectType, 
+            this.creativeModeSelector.selectedTerrainType,
+            this.creativeModeSelector.selectedItemId
+        );
 
         // Check for creative mode toggle
         if (this.inputHandler.toggleCreativeModePressed) {
             this.creativeModeEnabled = !this.creativeModeEnabled;
             console.log(`Creative Mode: ${this.creativeModeEnabled ? 'Enabled' : 'Disabled'}`);
-        }
-
-        // Check for placeable object selection change (only if creative mode is on)
-        if (this.creativeModeEnabled && this.inputHandler.placeableSelectionKeyPressed) {
-            const key = this.inputHandler.placeableSelectionKeyPressed;
-            if (key === '1') {
-                this.selectedObjectType = 'Tree';
-                console.log('Selected: Tree');
-            } else if (key === '2') {
-                this.selectedObjectType = 'House';
-                console.log('Selected: House');
-            }
-            // Add more else if blocks for keys '3', '4', etc. later
+            // Optional: Reset selection when toggling mode?
+            // this.creativeModeSelector.selectedObjectType = 'Tree'; // Or keep last selection
+            // this.creativeModeSelector.selectedTerrainType = null;
         }
 
         // Check for Save action
-        if (this.inputHandler.saveKeyPressed && this.currentScene) {
+        if (this.inputHandler.saveKeyPressed && this.currentScene instanceof GameScene) {
             // Save Scene to IndexedDB
-            (this.currentScene as GameScene).saveState(); 
+            this.currentScene.save(); 
             // Save Player Data to LocalStorage
             this.savePlayerData();
         }
 
-        // Load action (F9) removed previously
-        /*
-        if (this.inputHandler.loadKeyPressed && this.currentScene) {
-            // ... load logic removed ...
-        }
-        */
-
         // --- Handle UI Interactions --- 
-        // Call handler if either a regular UI click or a shift+click UI action occurred
-        if ((this.inputHandler.uiMouseClicked || this.inputHandler.uiDropActionClicked) && this.player) {
-            this.handleInventoryClick();
+        // Only need to handle inventory clicks here now
+        if (this.inputHandler.uiMouseClicked || this.inputHandler.uiDropActionClicked) {
+            // handleInventoryClick returns true if it handled the click
+            if (!this.handleInventoryClick()) {
+                // If not inventory, the creative selector handled its own click in its update method
+                // No further action needed here for creative panel clicks.
+            }
         }
         // --- End UI Interactions ---
 
@@ -322,14 +320,22 @@ export class Game {
     }
 
     // --- Handle Inventory Click --- 
-    private handleInventoryClick(): void {
-        if (!this.player || !this.currentScene || !(this.currentScene instanceof GameScene)) return;
-        const scene = this.currentScene as GameScene; // Type assertion for spawnDroppedItem access
+    /**
+     * Attempts to handle a click within the inventory bar boundaries.
+     * Returns true if the click was handled (i.e., within the inventory bar), false otherwise.
+     */
+    private handleInventoryClick(): boolean {
+        // Check if player exists first
+        if (!this.player) return false;
+        // Only proceed if the current scene is a GameScene
+        if (!(this.currentScene instanceof GameScene)) return false;
+        const scene = this.currentScene; // Already type-checked
 
         const clickX = this.inputHandler.mouseScreenPosition.x;
         const clickY = this.inputHandler.mouseScreenPosition.y;
 
         // Replicate inventory layout calculations from Renderer.drawInventoryUI
+        // TODO: Refactor UI layout constants/calculations to avoid duplication (maybe UI manager class later)
         const slotSize = 50;
         const padding = 10;
         const maxSlots = 10;
@@ -347,13 +353,16 @@ export class Game {
             // Map the clicked slot index to the item ID in the inventory Map
             let itemIdInSlot: string | null = null;
             let currentSlotIndex = 0;
-            for (const itemId of this.player.inventory.keys()) {
-                if (currentSlotIndex === clickedSlotIndex) {
-                    itemIdInSlot = itemId;
-                    break;
+            // Ensure player inventory exists before iterating
+            if (this.player.inventory) {
+                for (const itemId of this.player.inventory.keys()) {
+                    if (currentSlotIndex === clickedSlotIndex) {
+                        itemIdInSlot = itemId;
+                        break;
+                    }
+                    currentSlotIndex++;
+                    if (currentSlotIndex >= maxSlots) break; // Don't check beyond visible slots
                 }
-                currentSlotIndex++;
-                if (currentSlotIndex >= maxSlots) break; // Don't check beyond visible slots
             }
 
             // If an item exists in that slot...
@@ -369,7 +378,7 @@ export class Game {
                         const angle = this.player.rotation - Math.PI / 2; // Adjust rotation
                         const dropX = this.player.x + Math.cos(angle) * dropDistance;
                         const dropY = this.player.y + Math.sin(angle) * dropDistance;
-                        scene.spawnDroppedItem(itemIdInSlot, dropX, dropY, 1);
+                        scene.spawnDroppedItemNearPlayer(itemIdInSlot, 1);
                     } else {
                         // Log already handled in player.removeItem/dropItemById
                     }
@@ -384,7 +393,14 @@ export class Game {
                 //     this.player.unequipItem(); 
                 // }
             }
+            
+            // Consume the click regardless of whether an item was equipped/dropped,
+            // as long as the click was within the inventory bounds.
+            this.inputHandler.consumeClick();
+            return true; // Click was handled by inventory
         } // End if click within inventory bounds
+        // Return false if the click was outside the calculated inventory bounds
+        return false; 
     }
     // --- End Handle Inventory Click ---
 
@@ -400,8 +416,13 @@ export class Game {
             return;
         } 
 
-        // Delegate draw to the current scene
-        this.currentScene.draw(this.creativeModeEnabled, this.selectedObjectType);
+        // Delegate draw to the current scene - pass selection state from selector
+        this.currentScene.draw(
+            this.creativeModeEnabled, 
+            this.creativeModeSelector.selectedObjectType, 
+            this.creativeModeSelector.selectedTerrainType,
+            this.creativeModeSelector.selectedItemId
+        );
 
         // --- Draw Inventory UI --- 
         // Always draw if player exists
@@ -409,7 +430,32 @@ export class Game {
             this.renderer.drawInventoryUI(this.player.inventory, this.player.equippedItemId, this.assetLoader);
         }
         // --- End Draw Inventory UI ---
+
+        // --- Draw Creative Mode Panel --- 
+        // Call the selector's draw method directly
+        this.creativeModeSelector.draw(this.creativeModeEnabled);
+        // --- End Draw Creative Mode Panel ---
     }
     
     // Boundary check logic is now moved to the scene
+
+    // Save Game delegates to Scene and Player Data
+    private async saveGame(): Promise<void> {
+         console.log("Saving game...");
+         try {
+             // 1. Save Player Data (localStorage)
+             this.savePlayerData(); // Calls method that uses this.player and this.currentScene
+
+             // 2. Save Scene State (IndexedDB)
+             if (this.currentScene) { // Add null check for scene
+                await this.currentScene.save();
+             } else {
+                 console.error("Cannot save scene state: Current scene is null.");
+             }
+
+             console.log("Game saved successfully.");
+         } catch (error) {
+             console.error("Failed to save game:", error);
+         }
+     }
 } 

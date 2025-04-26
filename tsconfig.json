@@ -3,7 +3,7 @@
     /* Base Options: */
     "target": "ESNext",                       /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
     "module": "ESNext",                       /* Specify what module code is generated. */
-    "lib": ["ES2016", "DOM"],        /* Specify library files to be included in the compilation. */
+    "lib": ["ES2017", "DOM"],        /* Specify library files to be included in the compilation. */
     "allowJs": true,                 /* Allow javascript files to be compiled. */
     "outDir": "./dist",                        /* Specify an output folder for all emitted files. */
     "rootDir": "./src",                       /* Specify the root folder within your source files. */

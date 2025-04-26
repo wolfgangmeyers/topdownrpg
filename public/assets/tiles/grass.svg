@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <!-- Base grass color (using a color from the old pattern) -->
+  <rect width="64" height="64" fill="#558B2F"/>
+  
+  <!-- Texture elements (similar colors, adjusted positions for 64x64) -->
+  <circle cx="15" cy="12" r="4" fill="#689F38" opacity="0.6"/>
+  <circle cx="48" cy="30" r="3" fill="#33691E" opacity="0.5"/>
+  <circle cx="25" cy="50" r="4" fill="#7CB342" opacity="0.6"/>
+  <circle cx="55" cy="8" r="3" fill="#689F38" opacity="0.5"/>
+  <circle cx="8" cy="35" r="3.5" fill="#8D6E63" opacity="0.3"/> <!-- Muted brown speckle -->
+  <circle cx="40" cy="55" r="3.5" fill="#6D4C41" opacity="0.25"/> <!-- Darker muted brown speckle -->
+</svg> 
