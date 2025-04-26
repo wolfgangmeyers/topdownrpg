@@ -45,6 +45,7 @@ export const ITEM_CONFIG: { [key: string]: Item } = {
         assetPath: '/assets/svg/log.svg',
         itemType: ItemType.RESOURCE,
         stackable: true,
+        maxStackSize: 50,
         equipable: false,
     },
     // Add more items here as needed
