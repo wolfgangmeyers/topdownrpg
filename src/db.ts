@@ -113,4 +113,37 @@ export async function loadSceneState(sceneId: string): Promise<SavedSceneState |
              reject(new Error(`Transaction error loading scene state: ${transaction.error}`));
         }
     });
+}
+
+/**
+ * Deletes the state of a scene from IndexedDB.
+ * @param {string} sceneId The ID of the scene to delete.
+ * @returns {Promise<void>} A promise that resolves when deletion is complete.
+ */
+export async function deleteSceneState(sceneId: string): Promise<void> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(SCENE_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(SCENE_STORE_NAME);
+        const request = store.delete(sceneId);
+
+        request.onsuccess = () => {
+            console.log(`Scene [${sceneId}] state deleted successfully.`);
+            resolve();
+        };
+
+        request.onerror = () => {
+            console.error(`Error deleting scene [${sceneId}] state:`, request.error);
+            reject(new Error(`Error deleting scene state: ${request.error}`));
+        };
+
+        transaction.oncomplete = () => {
+            db.close();
+        };
+        transaction.onerror = () => {
+            console.error(`Transaction error deleting scene [${sceneId}]:`, transaction.error);
+            db.close();
+            reject(new Error(`Transaction error deleting scene state: ${transaction.error}`));
+        }
+    });
 } 

@@ -14,63 +14,72 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **`game.ts`**: Central orchestrator.
     *   Initializes and holds references to core systems (`Renderer`, `InputHandler`, `AssetLoader`, `AudioPlayer`).
     *   Instantiates and holds reference to the `CreativeModeSelector` UI component.
-    *   Manages the `currentScene` instance (currently `GameScene`).
+    *   Manages the single `currentScene` instance and `currentSceneId`.
+    *   Handles scene transitions via `changeScene(newSceneId, contextData?)`:
+        *   Saves outgoing scene state (`currentScene.save()`).
+        *   Saves player state (`savePlayerData`) including the *new* `currentSceneId`.
+        *   Creates new `GameScene` instance, passing `contextData`.
+        *   Calls `newScene.load()`.
+        *   Positions player based on `contextData.targetPosition` or defaults (center for most scenes, near exit for interiors).
+        *   Resets input state.
+    *   Provides `getCurrentSceneId()` getter.
     *   Handles global states like `isLoading`, `creativeModeEnabled`.
     *   Manages player persistence (`localStorage`) via internal `savePlayerData`/`loadPlayerData` methods.
-    *   Triggers scene persistence (`IndexedDB`) via `scene.save()`.
+    *   Triggers scene persistence (`IndexedDB`) via `currentScene.save()` and explicit `saveGame()` method (e.g., on F5).
     *   Loads sounds via `AudioPlayer` during init.
     *   Handles resuming `AudioContext` on user interaction.
     *   Handles clicks on inventory UI (`handleInventoryClick`), calling `player` methods and `scene.spawnDroppedItemNearPlayer`.
     *   Delegates `update` and `draw` calls to the `currentScene` and `CreativeModeSelector`.
     *   Passes creative selection state (`selectedObjectType`, `selectedTerrainType`, `selectedItemId`) from `CreativeModeSelector` to the `currentScene`.
     *   Calls `Renderer.drawInventoryUI`.
-    *   Handles input related to global state changes (creative mode toggle, saving).
+    *   Handles input related to global state changes (creative mode toggle, saving, debug teleport).
 *   **`scene.ts`**: Defines scene structure.
-    *   `Scene` (Abstract Class): Base class defining the required interface (`load`, `update`, `draw`, `save`, `getId`) and holding common references.
-    *   `GameScene` (Concrete Class): Represents a playable area. Acts as a coordinator, holding instances of and delegating tasks to managers and controllers.
+    *   `Scene` (Abstract Class): Base class defining the required interface (`load`, `update`, `draw`, `save`, `getId`, `getWorldDimensions`, `getTileSize`) and holding common references (`Game`, `Renderer`, etc.).
+    *   `GameScene` (Concrete Class): Represents a playable area.
+        *   Accepts `contextData` in constructor.
         *   Holds `EntityManager`, `TerrainManager`, `SceneStateManager`, `GameplayController`, `CreativeController`, `SceneRenderer`.
-        *   `load()`: Loads common assets (terrain tiles), delegates state loading to `SceneStateManager`, and populates default objects via `EntityManager` if needed.
-        *   `update()`: Delegates logic to `GameplayController` or `CreativeController` based on `creativeModeEnabled`. Updates `Player` and `SceneRenderer` camera.
-        *   `draw()`: Retrieves necessary state from controllers and delegates rendering to `SceneRenderer`.
+        *   `load()`: Loads common assets, delegates state loading to `SceneStateManager`. If state doesn't exist, calls `generateDefaultLayout`. Updates `SceneRenderer` dimensions via `updateWorldDimensions`.
+        *   `generateDefaultLayout()`: Generates default scene content based on `sceneId` (forest, road room, or 10x10 interior with wood floor and `DoorExit` linked using `contextData`).
+        *   `update()`: Delegates logic to `GameplayController` or `CreativeController`. Updates `Player` and `SceneRenderer` camera.
+        *   `draw()`: Retrieves necessary state and delegates rendering to `SceneRenderer`. Calculates debug bounds for houses.
         *   `save()`: Delegates state saving to `SceneStateManager`.
-        *   `spawnDroppedItemNearPlayer()`: Public method called by `Game` to facilitate dropping items from UI, delegates spawning to `EntityManager`.
+        *   `getWorldDimensions()`: Returns world size based on `TerrainManager`'s current grid dimensions.
+        *   `getTileSize()`: Returns the scene's tile size.
+        *   `spawnDroppedItemNearPlayer()`: Helper for dropping items from UI.
 *   **`entityManager.ts`**: `EntityManager` class.
-    *   Manages collections of `staticObjects` (Trees, Houses) and `droppedItems`.
+    *   Manages collections of `staticObjects` (Trees, Houses, `DoorExit`) and `droppedItems`. Handles `DoorExit` type in methods.
     *   Provides methods for adding (`addStaticObject`), removing (`removeStaticObject`, `removeDroppedItem`), and querying (`getObjectAt`) entities.
     *   Handles spawning of dropped items (`spawnDroppedItem`), including asset loading checks and sound playback.
     *   Encapsulates logic for destroying trees and spawning logs (`destroyTreeAndSpawnLogs`).
-    *   Includes logic for populating the scene with default objects (`populateTrees`).
+    *   Includes logic for populating default objects (`populateTrees`).
     *   Provides a static collision checking helper (`checkCollision`).
 *   **`terrainManager.ts`**: `TerrainManager` class.
     *   Manages the `terrainGrid` (2D array of `TerrainType`).
-    *   Initializes the grid to a default state.
-    *   Provides methods to get tile type/config (`getTileType`, `getTileConfig`), check walkability (`isWalkable`), place terrain (`placeTerrainAt`).
-    *   Provides access to the grid data for rendering (`getGrid`) and persistence (`setGrid`).
+    *   Initializes the grid based on initial world size. Stores internal `rows`, `cols`.
+    *   Provides methods for tile info (`getTileType`, `getTileConfig`), walkability (`isWalkable`), placing terrain (`placeTerrainAt`).
+    *   `setGrid(newGrid)`: Updates internal dimensions (`rows`, `cols`) based on the loaded grid.
+    *   `resizeGrid(rows, cols)`: Resizes the grid and re-initializes (used by default layout generation).
+    *   `fillGridWith(type)`: Fills the current grid with a specified terrain type.
+    *   Provides grid data (`getGrid`, `getGridDimensions`).
 *   **`sceneStateManager.ts`**: `SceneStateManager` class.
-    *   Handles saving and loading scene state (`staticObjects`, `droppedItems`, `terrainGrid`) to/from IndexedDB via `db.ts`.
-    *   Serializes/deserializes entity state (including Tree health).
-    *   Coordinates with `EntityManager` and `TerrainManager` to restore loaded state.
-    *   Handles pre-loading of assets required by the saved state.
+    *   Handles saving/loading scene state (`staticObjects`, `droppedItems`, `terrainGrid`) to/from IndexedDB via `db.ts`.
+    *   Serializes/deserializes entity state, including `House.id` and `DoorExit` target information (`targetSceneId`, `targetPosition`).
+    *   Handles pre-loading of assets required by saved state.
 *   **`gameplayController.ts`**: `GameplayController` class.
-    *   Handles input processing and logic updates during normal gameplay mode.
-    *   Manages player movement, checking terrain walkability (`TerrainManager`) and object collision (`EntityManager`). Uses a reduced collision box for Houses to allow overlap near the door.
-    *   Handles tool usage (cooldowns, hit detection via `EntityManager`, triggering `Player` animations and `EntityManager` damage/destruction).
-    *   Manages item pickup logic (proximity checks, interacting with `Player` inventory and `EntityManager`).
-    *   Handles item dropping via 'G' key (interacting with `Player` inventory and `EntityManager`).
-    *   Checks for player entering house door trigger areas (`checkDoorEntry`).
-    *   Provides getter for closest pickup item (`getClosestPickupItem`) for UI display.
+    *   Receives `Game` instance in constructor.
+    *   Handles gameplay input/logic: movement (terrain/object collision, adjusted house bounds, ignores `DoorExit`), tool use, item pickup/drop.
+    *   `checkDoorEntry()`: Detects entry into `House` trigger zone, gets `house.id`, calculates exit position, calls `game.changeScene(\`interior-\${house.id}\`, contextData)`.
+    *   `checkExitTrigger()`: Detects collision with `DoorExit`, retrieves target info, calls `game.changeScene(targetSceneId, { targetPosition })`.
+    *   Provides getter for closest pickup item.
 *   **`creativeController.ts`**: `CreativeController` class.
-    *   Handles input processing and logic updates during creative mode.
-    *   Manages placement/removal of objects (via `EntityManager`) and terrain (via `TerrainManager`) based on mouse clicks and delete key.
-    *   Handles spawning of items placed via creative mode (`EntityManager`).
-    *   Provides getters for placement preview info (`getPlacementPreviewInfo`) and object highlighting (`getHighlightObjectInfo`) used by the renderer.
+    *   Handles creative mode input/logic: placement/removal of objects/terrain/items via `EntityManager`/`TerrainManager`.
+    *   Handles deletion: If deleting a `House`, calls `db.deleteSceneState(\`interior-\${house.id}\`)` before removing the house object.
+    *   Provides getters for placement preview/highlight info.
 *   **`sceneRenderer.ts`**: `SceneRenderer` class.
-    *   Responsible for drawing all world-space elements for a `GameScene`.
-    *   Holds references to `EntityManager`, `TerrainManager`, `Player`, etc., to get data needed for drawing.
-    *   Uses the core `Renderer` to perform actual drawing operations (tiles, objects, items, player, equipped items, health bars, pickup prompts).
-    *   Handles camera updates (`updateCamera`) based on player position and world boundaries.
-    *   Draws creative mode overlays (placement previews, highlights) based on data from `CreativeController`.
-    *   Draws debug bounds (e.g., for house collision/triggers) when provided by `GameScene`.
+    *   Responsible for drawing world-space elements.
+    *   `updateWorldDimensions()`: Method to update internal world size, called by `GameScene.load`.
+    *   `updateCamera()`: Updates camera based on player, viewport, and *current* world dimensions (allows centering smaller scenes).
+    *   Draws terrain, static objects (handles `Tree`, `House`, `DoorExit`), items, player, UI prompts, creative overlays, debug bounds.
 *   **`renderer.ts`**: Core Canvas rendering abstraction.
     *   Holds the canvas context (`ctx`).
     *   Manages viewport size and camera coordinates (`cameraX`, `cameraY`). Updated by `SceneRenderer`.
@@ -79,8 +88,8 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Provides debug drawing method: `drawDebugRect`.
     *   Handles canvas resizing.
 *   **`input.ts`**: `InputHandler` class.
-    *   Attaches listeners, tracks keys/mouse state (world/screen coords), manages single-frame action flags (`useToolPressed`, `mouseClicked`, `uiMouseClicked`, `deletePressed` etc.).
-    *   Provides methods to query state (`getMovementDirection`, flags). Includes `consumeClick` and `wasClickConsumedThisFrame` for UI interaction management. Requires `Renderer` reference.
+    *   Attaches listeners, tracks keys/mouse state (world/screen coords), manages single-frame action flags (`useToolPressed`, `mouseClicked`, `uiMouseClicked`, `deletePressed` etc.). Added debug teleport flag.
+    *   Provides methods to query state (`getMovementDirection`, flags). Includes `consumeClick` and `resetMovement`. Requires `Renderer` reference.
 *   **`assets.ts`**: `AssetLoader` class for asynchronous loading and caching of image assets (`HTMLImageElement`).
 *   **`audio.ts`**: `AudioPlayer` class for loading (`loadSound`), caching (`AudioBuffer`), and playing sounds via Web Audio API. Handles context resuming.
 *   **`player.ts`**: `Player` entity class.
@@ -88,53 +97,57 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Stores inventory (`Map<string, InventorySlot>`), equipped item (`equippedItemId`).
     *   Stores animation state (`isSwinging`, timers).
     *   Provides methods for movement (`move`), updates (`update` - rotation, animation), inventory management (`addItem`, `removeItem`, `equipItem`, etc.), and animation control (`startSwing`, `getSwingAngleOffset`).
-*   **`tree.ts`, `house.ts`**: Static object entity classes (`Tree` includes health and state).
-*   **`item.ts`**: Item definition module (`ItemType`, `Item` interface, `ITEM_CONFIG`, `getItemConfig`).
+*   **`tree.ts`, `house.ts`**: Static object entity classes. (`Tree` includes health/state, `House` has `id`).
+*   **`doorExit.ts`**: New static object entity class. Stores `targetSceneId` and `targetPosition`. Has `setTarget` method.
+*   **`item.ts`**: Item definition module (`ItemType`, `Item` interface, `ITEM_CONFIG`, `getItemConfig`). (`door-exit` removed as item).
 *   **`droppedItem.ts`**: Defines the `DroppedItem` interface used by `EntityManager` and `SceneRenderer`.
-*   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. Manages its own state, input handling (consuming clicks), and drawing via `Renderer`. Loads its own assets.
-*   **`db.ts`**: IndexedDB persistence layer abstraction (`saveSceneState`, `loadSceneState`).
-*   **`terrain.ts`**: Terrain definition module (`TerrainType`, `TerrainConfig`, `TERRAIN_CONFIG`, `getTerrainConfig`).
+*   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. (`DoorExit` config restored but filtered from UI panel). Manages its own state, input handling, drawing. Loads its own assets.
+*   **`db.ts`**: IndexedDB persistence layer abstraction (`saveSceneState`, `loadSceneState`). Added `deleteSceneState` function.
+*   **`terrain.ts`**: Terrain definition module (`TerrainType`, `TerrainConfig`, `TERRAIN_CONFIG`, `getTerrainConfig`). (`wood-floor` added).
 *   **`npc.ts`, `ui.ts`**: Placeholder modules for future features.
 
 ## 3. Data Flow & State
 
-*   **Initialization:** `main.ts` -> `Game` (creates core systems, `CreativeSelector`) -> `Game.init` -> Load global sounds/UI assets -> `loadPlayerData` (localStorage) -> Create `Player` -> Restore Player state -> Create `GameScene` -> `GameScene.load` (loads common assets, delegates state load to `SceneStateManager`, populates defaults via `EntityManager` if needed) -> Game loop starts.
-*   **Update Cycle:** `Game.update` -> `CreativeModeSelector.update` (handles panel clicks, updates selection, consumes input) -> `Game.handleInventoryClick` (handles inv clicks, consumes input) -> `Game.currentScene.update` -> `GameScene` delegates to `GameplayController.update` OR `CreativeController.update` -> Controllers interact with `Player`, `InputHandler`, `EntityManager`, `TerrainManager` -> `Player.update` -> `SceneRenderer.updateCamera` -> `InputHandler.resetFrameState`.
-*   **Draw Cycle:** `Game.draw` -> `Game.currentScene.draw` -> `GameScene` gets info from controllers (`getClosestPickupItem`, `getPlacementPreviewInfo`, etc.) -> `GameScene` delegates to `SceneRenderer.drawScene` -> `SceneRenderer` draws world elements using data from `EntityManager`, `TerrainManager`, `Player` and info from `GameScene` -> `Game` draws screen-space UI (`Renderer.drawInventoryUI`, `CreativeModeSelector.draw`).
+*   **Initialization:** `main.ts` -> `Game` -> `Game.init` -> Load sounds -> `loadPlayerData` (gets `currentSceneId`) -> Create `Player` -> Restore Player state -> Create `CreativeSelector` -> Load Creative Assets -> Create initial `GameScene` instance (passing `Game`) -> `GameScene.load` (loads common assets, `SceneStateManager.loadState`, generates default if needed, `sceneRenderer.updateWorldDimensions`) -> Game loop starts.
+*   **Update Cycle:** `Game.update` -> `CreativeSelector.update` -> Check debug teleport / save keys -> `Game.currentScene.update` -> `GameScene` delegates to `GameplayController.update` OR `CreativeController.update` -> Controllers interact -> `Player.update` -> `SceneRenderer.updateCamera` -> Handle Inventory Clicks -> `InputHandler.resetFrameState`.
+*   **Draw Cycle:** `Game.draw` -> `Game.currentScene.draw` -> `GameScene` gets info -> Delegates to `SceneRenderer.drawScene` -> `SceneRenderer` draws world -> `Game` draws screen-space UI (`InventoryUI`, `CreativeSelector`).
+*   **Scene Transition (`Game.changeScene(newId, context?)`):** Triggered by `GameplayController` (`checkDoorEntry` or `checkExitTrigger`). Saves outgoing scene -> Updates player data (`currentSceneId`) -> Creates new `GameScene` (passing `context`) -> Calls `newScene.load` -> Positions player (using `context.targetPosition` or defaults) -> Resets input.
 *   **State Location:**
-    *   Global Game State: `Game` class (`creativeModeEnabled`).
+    *   Global Game State: `Game` class (`creativeModeEnabled`, `currentSceneId`).
     *   Creative Selection State: `CreativeModeSelector`.
-    *   Scene Layout State: `EntityManager` (`staticObjects`, `droppedItems`), `TerrainManager` (`terrainGrid`). Persisted/loaded via `SceneStateManager` to IndexedDB.
-    *   Object-Specific State: `Tree`, `Player`, etc.
+    *   Scene Layout State: Managed by `EntityManager`, `TerrainManager` within `GameScene`. Persisted/loaded via `SceneStateManager` to IndexedDB, keyed by `sceneId`.
+    *   Object-Specific State: `Tree` (health), `House` (ID), `DoorExit` (targetSceneId, targetPosition).
     *   Player Progress Persistence: `localStorage` (`PlayerSaveData`) via `Game` methods.
     *   Input State: `InputHandler` class.
-    *   Asset Cache: `AssetLoader` (images), `AudioPlayer` (sounds).
+    *   Asset Cache: `AssetLoader`, `AudioPlayer`.
 
 ## 4. Key Architectural Concepts
 
 *   **Component-Based Design:** Functionality divided into distinct modules/classes.
-*   **Separation of Concerns:** `GameScene` responsibilities are broken down into specialized managers and controllers (e.g., rendering, entity management, input handling per mode, state persistence).
-*   **Manager Pattern:** Used for `EntityManager`, `TerrainManager`, `SceneStateManager` to encapsulate specific domains.
-*   **Controller Pattern:** Used for `GameplayController`, `CreativeController` to handle mode-specific logic and input processing.
-*   **Scene Management:** Centralized control of game areas via the `Scene` abstraction.
-*   **Decoupled Rendering:** Core `Renderer` hides Canvas API details; `SceneRenderer` handles drawing specific game elements.
+*   **Separation of Concerns:** `GameScene` responsibilities broken down into specialized managers/controllers.
+*   **Manager Pattern:** Used for `EntityManager`, `TerrainManager`, `SceneStateManager`.
+*   **Controller Pattern:** Used for `GameplayController`, `CreativeController`.
+*   **Scene Management:** `Game` manages `currentScene` instance and `currentSceneId`. Transitions handled by `Game.changeScene`, loading/saving delegated to `Scene`/`SceneStateManager`. Default scene generation for non-existent scene IDs (including interiors).
+*   **Decoupled Rendering:** Core `Renderer`, Scene-specific `SceneRenderer`. `SceneRenderer` dimensions updated dynamically.
 *   **Decoupled Audio:** `AudioPlayer` hides Web Audio API details.
-*   **World vs. Screen Coordinates:** Explicit handling via camera translation (`SceneRenderer`) and separate UI drawing (`Renderer`, `CreativeModeSelector`).
+*   **World vs. Screen Coordinates:** Handled by camera translation (`SceneRenderer`) and UI drawing.
 *   **Asynchronous Operations:** Asset/sound loading and IndexedDB operations use `async`/`await`.
-*   **Dual Persistence:** IndexedDB for scene layout (`SceneStateManager`), `localStorage` for player progress (`Game`).
-*   **State Management:** Game state distributed across `Game`, managers (`EntityManager`, `TerrainManager`), controllers (`GameplayController`, `CreativeController`), entities (`Player`, `Tree`), and UI components (`CreativeModeSelector`).
-*   **Input Handling:** Single-frame flags in `InputHandler`. UI components (`CreativeModeSelector`, inventory click logic) consume input events via `InputHandler.consumeClick()` to prevent unintended world interactions (like placing the currently selected creative item) in the same frame. Input state is read by controllers.
-*   **Collision Detection:** Basic AABB checking implemented in `GameplayController` (player vs objects) and `EntityManager` (static helper, used internally for tree placement). Terrain walkability checked via `TerrainManager`.
-*   **House Entry Trigger:** Uses a separate check (`GameplayController.checkDoorEntry`) after movement is finalized, comparing player center to a dedicated trigger area distinct from the house's main collision bounds.
+*   **Dual Persistence:** IndexedDB for scene layout (keyed by scene ID, managed by `SceneStateManager`), `localStorage` for player progress (`Game`).
+*   **State Management:** Game state distributed across `Game`, managers, controllers, entities, UI components.
+*   **Input Handling:** Single-frame flags in `InputHandler`. UI consumes clicks, `resetMovement` added.
+*   **Collision Detection:** AABB checks in `GameplayController` (player vs objects, ignores `DoorExit`), `CreativeController` (placement), `EntityManager` (static helper). Terrain walkability checked via `TerrainManager`.
+*   **House Entry/Exit Triggers:** Separate checks in `GameplayController` comparing player center to calculated trigger zones (`checkDoorEntry` for `House`, `checkExitTrigger` for `DoorExit`). Context data (`originSceneId`, `exitTargetPosition`, `targetPosition`) passed via `changeScene`.
 *   **Simple State Machine:** Tree uses `STANDING`/`FALLING` states.
-*   **Delayed Actions:** Using `setTimeout` for tree destruction effects (triggered by `GameplayController`, executed by `EntityManager`).
-*   **UI Interaction Handling:** UI components handle their own click detection and consume input events.
-*   **Debug Visuals:** Creative mode can display debug bounds calculated in `GameScene` and drawn via `SceneRenderer`/`Renderer`.
+*   **Delayed Actions:** Using `setTimeout` for tree destruction effects.
+*   **UI Interaction Handling:** UI components handle clicks, consume events.
+*   **Debug Visuals:** Creative mode can display debug bounds.
 
 ## 5. Additional Notes
 
 *   The refactoring significantly reduced the complexity of `GameScene`, making it primarily a coordinator.
-*   New classes (`EntityManager`, `TerrainManager`, `SceneStateManager`, `GameplayController`, `CreativeController`, `SceneRenderer`) now encapsulate specific responsibilities, improving modularity and maintainability.
+*   New classes (`EntityManager`, `TerrainManager`, `SceneStateManager`, `GameplayController`, `CreativeController`, `SceneRenderer`, `DoorExit`) now encapsulate specific responsibilities, improving modularity and maintainability.
 *   Clearer distinction between core rendering (`Renderer`) and scene-specific rendering (`SceneRenderer`).
-*   Persistence logic is now isolated in `SceneStateManager` (for scene) and `Game` (for player).
-*   Input handling logic is separated based on game mode (`GameplayController`, `CreativeController`). 
+*   Persistence logic is isolated in `SceneStateManager` (for scene) and `Game` (for player).
+*   Input handling logic is separated based on game mode (`GameplayController`, `CreativeController`).
+*   Scene transitions handle saving/loading and context passing.
+*   Dynamic world/grid dimensions handled by `TerrainManager` and `SceneRenderer`. 

@@ -46,10 +46,15 @@ This document outlines the plan for creating a web-based, top-down action RPG us
     *   Implement `npc.ts` class/object (managed by `EntityManager`?).
     *   Place static NPCs on the map.
     *   Implement interaction logic in `GameplayController`: detect player proximity and key press (`E`).
-*   **House Entry:**
-    *   Detect player collision with house doors (`GameplayController`).
-    *   Implement basic scene transition mechanism (Triggered by door collision).
-    *   Create a separate scene type for house interiors.
+*   **House Entry (Implemented):**
+    *   Detect player collision with house door trigger areas (`GameplayController.checkDoorEntry`). House instances now have unique IDs (`crypto.randomUUID`).
+    *   Implemented scene transition mechanism (`Game.changeScene`) triggered by door collision. Saves outgoing scene state (via `SceneStateManager`).
+    *   Interior scenes use ID format `interior-<houseId>`. If an interior scene doesn't exist in IndexedDB, a default 10x10 wood-floor room is generated (`GameScene.generateDefaultLayout`).
+    *   The default interior includes a `DoorExit` object (`doorExit.ts`, using `door-exit.svg`) placed at the bottom center. This object stores the `originSceneId` and `exitTargetPosition` passed as context during the transition.
+    *   `GameplayController.checkExitTrigger` handles collision with the `DoorExit` object to trigger the transition back to the origin scene using the stored target data.
+    *   `TerrainManager` updated to handle dynamic grid resizing (`resizeGrid`, `setGrid`) for different scene sizes.
+    *   `SceneRenderer` updated to handle dynamic world dimensions for correct camera centering in smaller scenes.
+    *   House interior scenes are deleted from IndexedDB (`db.deleteSceneState`) when the corresponding House object is deleted in creative mode (`CreativeController`).
 *   **Dialogue System:**
     *   Implement `ui.ts` or dedicated UI components to handle UI elements.
     *   Create a simple dialogue box UI (HTML/CSS overlay or drawn on canvas).

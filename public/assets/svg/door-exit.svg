@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 25" width="60" height="37.5">
+  <!-- Base Mat Color (dark grey/brown) -->
+  <rect x="1" y="1" width="38" height="23" rx="3" ry="3" fill="#5D4037" stroke="#4E342E" stroke-width="1"/>
+
+  <!-- Simple Border -->
+  <rect x="3" y="3" width="34" height="19" rx="2" ry="2" fill="none" stroke="#8D6E63" stroke-width="1.5"/>
+
+  <!-- Arrow elements removed -->
+  <!-- 
+  <polyline points="15,8 20,13 25,8" stroke="#BCAAA4" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="20" y1="13" x2="20" y2="17" stroke="#BCAAA4" stroke-width="2" stroke-linecap="round"/>
+  -->
+
+  <!-- Simple text instead of arrow (alternative) -->
+  <!-- <text x="20" y="17" font-family="sans-serif" font-size="8" fill="#BCAAA4" text-anchor="middle">EXIT</text> -->
+
+</svg> 

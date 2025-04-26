@@ -1,16 +1,16 @@
 export class House {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    svgPath: string;
+    public readonly svgPath: string = '/assets/svg/house.svg';
+    public id: string; // Unique identifier for this house instance
 
-    constructor(x: number, y: number, width: number, height: number, svgPath: string = '/assets/svg/house.svg') {
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        this.svgPath = svgPath;
+    constructor(
+        public x: number, 
+        public y: number, 
+        public width: number, 
+        public height: number,
+        id?: string // Optional ID for loading
+    ) {
+        // Generate a new UUID if no ID is provided (e.g., when placed in creative mode)
+        this.id = id || crypto.randomUUID();
     }
 
     // Houses are static for now

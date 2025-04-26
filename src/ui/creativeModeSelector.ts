@@ -2,12 +2,14 @@ import { Renderer } from '../renderer';
 import { InputHandler } from '../input';
 import { AssetLoader } from '../assets';
 import { TerrainType, TERRAIN_CONFIG } from '../terrain'; // Import terrain types and config
+import { ItemType, ITEM_CONFIG } from '../item';
 
 // Define placeable object types (Moved from game.ts)
-export type PlaceableObjectType = 'Tree' | 'House';
+export type PlaceableObjectType = 'Tree' | 'House' | 'DoorExit'; // Restored DoorExit
 export const PLACEABLE_OBJECT_CONFIG: Record<PlaceableObjectType, { assetPath: string }> = {
     'Tree': { assetPath: '/assets/svg/tree.svg' },
     'House': { assetPath: '/assets/svg/house.svg' },
+    'DoorExit': { assetPath: '/assets/svg/door-exit.svg' }, // Restored DoorExit config
 };
 
 // Combined type for items shown in the selector panel
@@ -58,6 +60,9 @@ export class CreativeModeSelector {
         for (const key in PLACEABLE_OBJECT_CONFIG) {
             if (Object.prototype.hasOwnProperty.call(PLACEABLE_OBJECT_CONFIG, key)) {
                 const type = key as PlaceableObjectType;
+                if (type === 'DoorExit') {
+                    continue; // Don't add DoorExit to the selectable items
+                }
                 const config = PLACEABLE_OBJECT_CONFIG[type];
                 this.items.push({
                     type: 'object',
@@ -73,30 +78,32 @@ export class CreativeModeSelector {
             if (Object.prototype.hasOwnProperty.call(TERRAIN_CONFIG, key)) {
                 const type = key as TerrainType;
                 const config = TERRAIN_CONFIG[type];
-                if (config.isPlaceable) { // Only add placeable terrain types
-                    this.items.push({
-                        type: 'terrain',
-                        id: type,
-                        name: config.name,
-                        assetPath: config.assetPath,
-                    });
-                }
+                // Removed if (config.isPlaceable) check
+                // Generate simple name from ID
+                const name = type.charAt(0).toUpperCase() + type.slice(1).replace('-', ' ');
+                this.items.push({
+                    type: 'terrain',
+                    id: type,
+                    name: name, // Use generated name
+                    assetPath: config.assetPath,
+                });
             }
         }
 
-        // Add specific Items (e.g., Axe)
-        const axeId = 'axe';
-        const axeConfig = this.itemConfig[axeId];
-        if (axeConfig) {
-            this.items.push({
-                type: 'item',
-                id: axeId,
-                name: axeConfig.name,
-                assetPath: axeConfig.assetPath,
-            });
+        // Add specific Items (e.g., Axe, Log)
+        const itemIdsToAdd = ['axe', 'log']; // Removed 'door-exit'
+        for (const itemId of itemIdsToAdd) {
+            const itemConfig = this.itemConfig[itemId];
+            if (itemConfig) {
+                this.items.push({
+                    type: 'item',
+                    id: itemId,
+                    name: itemConfig.name,
+                    assetPath: itemConfig.assetPath,
+                });
+            }
         }
-        // Add more items here if needed
-
+        
         console.log("Creative Mode Selector Initialized Items:", this.items);
     }
 

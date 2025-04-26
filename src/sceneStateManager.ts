@@ -8,12 +8,16 @@ import { Tree } from './tree';
 import { House } from './house';
 import { TerrainType } from './terrain'; // Import TerrainType
 import { DroppedItem } from './droppedItem'; // Import directly
+import { DoorExit } from './doorExit'; // Import DoorExit
 
 // --- Interfaces for Saved State (Copied and refined from scene.ts) ---
 interface SavedObjectState {
     type: PlaceableObjectType;
     x: number;
     y: number;
+    id?: string; // For Houses
+    targetSceneId?: string; // For DoorExit
+    targetPosition?: { x: number; y: number }; // For DoorExit
     currentHealth?: number; // Optional for Trees
 }
 
@@ -51,6 +55,12 @@ export class SceneStateManager {
                     state.currentHealth = obj.currentHealth; // Safe: obj is Tree here
                 } else if (obj instanceof House) {
                     type = 'House';
+                    state.id = obj.id; // Save the House ID
+                } else if (obj instanceof DoorExit) {
+                    type = 'DoorExit';
+                    // Save target info if it exists
+                    if (obj.targetSceneId) state.targetSceneId = obj.targetSceneId;
+                    if (obj.targetPosition) state.targetPosition = obj.targetPosition;
                 } else {
                     console.warn('Unknown object type during save:', obj);
                     return null; // Skip
@@ -73,7 +83,7 @@ export class SceneStateManager {
             const sceneState: SavedSceneState = {
                 objects: savedObjects,
                 droppedItems: savedDroppedItems,
-                terrainGrid: terrainGrid
+                terrainGrid: terrainGrid.map(row => [...row]) 
             };
 
             await dbSave(sceneId, sceneState);
@@ -140,7 +150,7 @@ export class SceneStateManager {
                 const objWidth = objImg.naturalWidth;
                 const objHeight = objImg.naturalHeight;
                 let shouldAddObject = true; // Flag to control adding the object
-                let objectInstance: Tree | House | null = null;
+                let objectInstance: Tree | House | DoorExit | null = null;
 
                 if (savedObj.type === 'Tree') {
                      const initialHealth = savedObj.currentHealth;
@@ -151,7 +161,14 @@ export class SceneStateManager {
                          shouldAddObject = false; // Don't add it
                      }
                  } else if (savedObj.type === 'House') {
-                     objectInstance = new House(savedObj.x, savedObj.y, objWidth, objHeight);
+                     objectInstance = new House(savedObj.x, savedObj.y, objWidth, objHeight, savedObj.id);
+                 } else if (savedObj.type === 'DoorExit') {
+                    objectInstance = new DoorExit(savedObj.x, savedObj.y, objWidth, objHeight);
+                    // Restore target info if it exists in save data
+                    if (savedObj.targetSceneId && savedObj.targetPosition) {
+                        objectInstance.setTarget(savedObj.targetSceneId, savedObj.targetPosition);
+                        console.log(`  Restored DoorExit target: Scene=${objectInstance.targetSceneId}, Pos=(${objectInstance.targetPosition?.x.toFixed(0)}, ${objectInstance.targetPosition?.y.toFixed(0)})`);
+                    }
                  }
 
                  // Add the object instance if it was created and should be added

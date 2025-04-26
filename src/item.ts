@@ -5,6 +5,7 @@ export enum ItemType {
     TOOL = 'TOOL',
     RESOURCE = 'RESOURCE',
     WEAPON = 'WEAPON',
+    PLACEABLE = 'PLACEABLE',
     // Add other types like CONSUMABLE, ARMOR etc. later
 }
 
@@ -14,6 +15,7 @@ export enum ItemType {
 export interface Item {
     id: string;          // Unique identifier (e.g., 'axe', 'wood_log')
     name: string;        // Display name (e.g., 'Axe', 'Wood Log')
+    description?: string; // Optional description
     assetPath: string;   // Path to the SVG asset for rendering
     stackable: boolean;  // Can multiple instances exist in one inventory slot?
     maxStackSize?: number; // How many can stack (if stackable)
@@ -30,21 +32,21 @@ export const ITEM_CONFIG: { [key: string]: Item } = {
     'axe': {
         id: 'axe',
         name: 'Axe',
-        assetPath: '/assets/svg/axe.svg', // Needs to be created
+        description: 'A sturdy axe for chopping wood.',
+        assetPath: '/assets/svg/axe.svg',
+        itemType: ItemType.TOOL,
         stackable: false,
         equipable: true,
-        itemType: ItemType.TOOL,
-        // Add axe-specific properties like damage, range later
     },
-    'wood_log': {
-        id: 'wood_log',
-        name: 'Wood Log',
-        assetPath: '/assets/svg/log.svg', // Will be created next
-        stackable: true,
-        maxStackSize: 50, // Example stack size
-        equipable: false,
+    'log': {
+        id: 'log',
+        name: 'Log',
+        description: 'A piece of wood.',
+        assetPath: '/assets/svg/log.svg',
         itemType: ItemType.RESOURCE,
-    }
+        stackable: true,
+        equipable: false,
+    },
     // Add more items here as needed
 };
 

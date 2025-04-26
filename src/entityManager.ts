@@ -5,6 +5,7 @@ import { PlaceableObjectType, PLACEABLE_OBJECT_CONFIG } from './ui/creativeModeS
 import { Tree } from './tree';
 import { House } from './house';
 import { DroppedItem } from './droppedItem'; // Assuming DroppedItem interface is moved here or imported
+import { DoorExit } from './doorExit'; // Import DoorExit
 
 // Define BoundingBox locally or import if moved to a utility file
 interface BoundingBox {
@@ -15,16 +16,16 @@ interface BoundingBox {
 }
 
 export class EntityManager {
-    public staticObjects: (Tree | House)[] = [];
+    public staticObjects: (Tree | House | DoorExit)[] = [];
     public droppedItems: DroppedItem[] = [];
 
     constructor(private assetLoader: AssetLoader, private audioPlayer: AudioPlayer) {}
 
-    addStaticObject(obj: Tree | House): void {
+    addStaticObject(obj: Tree | House | DoorExit): void {
         this.staticObjects.push(obj);
     }
 
-    removeStaticObject(objToRemove: Tree | House): void {
+    removeStaticObject(objToRemove: Tree | House | DoorExit): void {
         this.staticObjects = this.staticObjects.filter(obj => obj !== objToRemove);
         console.log(`Removed object at (${objToRemove.x.toFixed(0)}, ${objToRemove.y.toFixed(0)})`);
     }
@@ -67,19 +68,16 @@ export class EntityManager {
         console.log("Fallen tree removed from scene.");
 
         // Spawn WoodLog Item
-        this.spawnDroppedItem('wood_log', destroyedTreeX, destroyedTreeY, 1); // Use the helper method
+        this.spawnDroppedItem('log', destroyedTreeX, destroyedTreeY, 1); // Use the helper method
     }
 
     // Helper to find the first static object whose bounding box contains the point (x, y)
-    getObjectAt(x: number, y: number): Tree | House | null {
+    getObjectAt(x: number, y: number): Tree | House | DoorExit | null {
         for (const obj of this.staticObjects) {
-            const halfWidth = obj.width / 2;
-            const halfHeight = obj.height / 2;
-            const isInside = (
-                x >= obj.x - halfWidth && x <= obj.x + halfWidth &&
-                y >= obj.y - halfHeight && y <= obj.y + halfHeight
-            );
-            if (isInside) {
+            const objBounds: BoundingBox = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+            const pointBounds: BoundingBox = { x: x, y: y, width: 1, height: 1 };
+            
+            if (EntityManager.checkCollision(pointBounds, objBounds)) {
                 return obj;
             }
         }

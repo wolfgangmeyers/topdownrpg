@@ -18,6 +18,7 @@ export class InputHandler {
     public interactPressed: boolean = false; // Flag for interaction key (E)
     public dropItemPressed: boolean = false; // Flag for dropping item (G)
     public uiDropActionClicked: boolean = false; // Flag for Shift+Click on UI
+    public teleportDebugPressed: boolean = false; // TEMP: Flag for debug teleport
 
     private renderer: Renderer | null = null; // Add renderer reference
 
@@ -74,6 +75,10 @@ export class InputHandler {
             if (lowerCaseKey === 'g') {
                 this.dropItemPressed = true;
             }
+            // TEMP: Check for debug teleport key
+            if (lowerCaseKey === 't') {
+                this.teleportDebugPressed = true;
+            }
         });
 
         window.addEventListener('keyup', (e) => {
@@ -89,6 +94,7 @@ export class InputHandler {
             this.interactPressed = false; // Reset interact flag
             this.dropItemPressed = false; // Reset drop item flag
             this.uiDropActionClicked = false; // Reset UI drop action flag
+            this.teleportDebugPressed = false; // Reset debug flag
             // Note: deletePressed is reset on keyup, might need adjustment based on usage
         });
 
@@ -163,6 +169,7 @@ export class InputHandler {
         this.interactPressed = false; // Reset interact flag
         this.dropItemPressed = false; // Reset drop item flag
         this.uiDropActionClicked = false; // Reset UI drop action flag
+        this.teleportDebugPressed = false; // Reset debug flag
         // Note: deletePressed is reset on keyup, might need adjustment based on usage
     }
 
@@ -197,6 +204,12 @@ export class InputHandler {
         }
 
         return { dx, dy };
+    }
+
+    // Add method to reset movement state (clears held keys)
+    public resetMovement(): void {
+        this.keys.clear(); 
+        console.log("InputHandler movement state reset (keys cleared).");
     }
 
     // Check for interaction key (example)

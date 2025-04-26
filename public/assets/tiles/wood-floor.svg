@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <!-- Base wood color -->
+  <rect width="64" height="64" fill="#A1887F"/>
+
+  <!-- Planks (slightly darker lines) -->
+  <line x1="0" y1="16" x2="64" y2="16" stroke="#795548" stroke-width="1.5"/>
+  <line x1="0" y1="32" x2="64" y2="32" stroke="#795548" stroke-width="1.5"/>
+  <line x1="0" y1="48" x2="64" y2="48" stroke="#795548" stroke-width="1.5"/>
+
+  <!-- Subtle wood grain texture (vertical lines, varying opacity/color) -->
+  <line x1="10" y1="0" x2="10" y2="64" stroke="#8D6E63" stroke-width="0.7" opacity="0.6"/>
+  <line x1="25" y1="0" x2="25" y2="64" stroke="#BCAAA4" stroke-width="0.5" opacity="0.4"/>
+  <line x1="40" y1="0" x2="40" y2="64" stroke="#8D6E63" stroke-width="0.8" opacity="0.5"/>
+  <line x1="55" y1="0" x2="55" y2="64" stroke="#BCAAA4" stroke-width="0.6" opacity="0.4"/>
+</svg> 

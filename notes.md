@@ -101,6 +101,58 @@ This file captures key decisions, techniques, and context from the development s
 *   **Tuning:** The door trigger area (`doorBounds` calculation in both `checkDoorEntry` and `GameScene.draw`) required tuning the margins (`doorTopMargin = 15`, `doorBottomMargin = 60`) and horizontal offset (`doorXOffset = 20`) to align well visually and feel responsive.
 *   **Next Step:** Implement the actual scene transition when the door entry is detected.
 
+## Feature: House Entry & Scene Transitions (Implemented)
+
+*   **Goal:** Allow entering houses into unique, persistent interior scenes.
+*   **House Identification:** `House` class now has a unique `id` property, generated via `crypto.randomUUID()` upon creation if not loaded from save data.
+*   **Scene Transition Logic (`Game.changeScene`):**
+    *   A central `Game.changeScene(newSceneId, contextData?)` method handles transitions.
+    *   It accepts optional `contextData` to pass information between scenes (e.g., where the player should appear upon exiting).
+    *   **Save Outgoing Scene:** Before switching, it calls `currentScene.save()` to persist the state of the scene being left (using `SceneStateManager`).
+    *   **Player Data:** Saves player data (`localStorage`) *after* updating `Game.currentSceneId` to the *new* scene ID.
+    *   **New Scene Instance:** Creates a new `GameScene` instance for the `newSceneId`, passing the `Game` instance and `contextData`.
+    *   **Load New Scene:** Calls `newScene.load()`. `GameScene.load` uses `SceneStateManager` to load from IndexedDB. If no state exists for `newSceneId`, it calls `generateDefaultLayout`.
+    *   **Player Positioning:** Places the player in the new scene. Uses `contextData.targetPosition` if provided (e.g., when exiting a house). For new house interiors (`interior-*`), it places the player near the bottom exit door. Otherwise, defaults to the scene center.
+    *   **Input Reset:** Calls `InputHandler.resetFrameState()` and `InputHandler.resetMovement()` to prevent carried-over inputs.
+*   **Entering a House (`GameplayController.checkDoorEntry`):**
+    *   Detects collision with house door trigger area.
+    *   Gets the specific `house.id`.
+    *   Constructs `interiorSceneId = \`interior-\${house.id}\``.
+    *   Gets the current scene ID (`originSceneId = game.getCurrentSceneId()`).
+    *   Calculates an `exitTargetPosition` (slightly below the entry point).
+    *   Calls `game.changeScene(interiorSceneId, { originSceneId, exitTargetPosition })`.
+*   **Interior Scene Generation (`GameScene.generateDefaultLayout`):**
+    *   Checks if `sceneId` starts with `interior-`.
+    *   Resizes `TerrainManager` grid to 10x10 (`resizeGrid`).
+    *   Fills grid with `TerrainType.WOOD_FLOOR` (`fillGridWith`).
+    *   Creates a `DoorExit` static object at the bottom center.
+    *   Uses the `contextData` (passed via `Game.changeScene`) to call `doorExit.setTarget(contextData.originSceneId, contextData.exitTargetPosition)`, linking the exit back to the exterior scene.
+*   **Exiting a House (`GameplayController.checkExitTrigger`):**
+    *   New method called in `update`.
+    *   Checks for collision between player center and any `DoorExit` object.
+    *   If collision occurs and the `DoorExit` has valid `targetSceneId` and `targetPosition`:
+        *   Calls `game.changeScene(exitDoor.targetSceneId, { targetPosition: exitDoor.targetPosition })`.
+*   **`DoorExit` Object (`doorExit.ts`):**
+    *   New class for the static exit marker object.
+    *   Stores `targetSceneId` and `targetPosition`.
+    *   Has `setTarget` method.
+*   **Persistence (`SceneStateManager`, `db.ts`):**
+    *   `SavedObjectState` updated to include optional `id`, `targetSceneId`, `targetPosition`.
+    *   `SceneStateManager.saveState` saves these properties for `House` and `DoorExit` instances.
+    *   `SceneStateManager.loadState` restores these properties, passing the `id` to the `House` constructor and calling `setTarget` on loaded `DoorExit` instances.
+    *   `db.ts` now includes `deleteSceneState(sceneId)` function.
+*   **House Deletion (`CreativeController`):**
+    *   When a `House` is deleted via the Delete key, the controller constructs the corresponding `interior-<id>` and calls `db.deleteSceneState()` to remove the interior scene data from IndexedDB.
+*   **Dynamic World Size (`TerrainManager`, `SceneRenderer`):**
+    *   `TerrainManager.setGrid` updated to adopt the dimensions of the loaded grid, updating its internal `rows`/`cols`.
+    *   `SceneRenderer` has `updateWorldDimensions` method called by `GameScene.load`.
+    *   `SceneRenderer.updateCamera` uses the renderer's current world dimensions, allowing it to correctly center smaller scenes like interiors.
+*   **UI (`CreativeModeSelector`):**
+    *   `DoorExit` config restored to `PLACEABLE_OBJECT_CONFIG` (so `generateDefaultLayout` can find the asset path).
+    *   `initializeItems` explicitly skips adding `DoorExit` to the creative UI panel items.
+*   **Debug Teleport (`Game`, `InputHandler`):**
+    *   Pressing 'T' now saves the current scene via `currentScene.save()` before calling `changeScene('defaultForest')`.
+
 ## Known Issues / Next Steps (Implied)
 
 *   Only one scene ('defaultForest') implemented.

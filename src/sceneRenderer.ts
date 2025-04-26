@@ -5,6 +5,9 @@ import { EntityManager } from './entityManager'; // Import EntityManager
 import { DroppedItem } from './droppedItem'; // Import DroppedItem
 import { TerrainManager } from './terrainManager';
 import { Tree } from './tree'; // For instanceof check
+import { House } from './house'; // For instanceof check
+import { DoorExit } from './doorExit'; // Import DoorExit
+import { PLACEABLE_OBJECT_CONFIG } from './ui/creativeModeSelector'; // Import object config
 import { ItemType } from './item'; // For checking equipped item type
 // Import the interfaces from CreativeController or a shared file
 import { PlacementPreviewInfo, HighlightInfo } from './creativeController';
@@ -34,6 +37,15 @@ export class SceneRenderer {
         private worldHeight: number,
         private tileSize: number
     ) {}
+
+    // Method to update the renderer's knowledge of world dimensions
+    public updateWorldDimensions(newWidth: number, newHeight: number): void {
+        console.log(`SceneRenderer updating world dimensions to: ${newWidth}x${newHeight}`);
+        this.worldWidth = newWidth;
+        this.worldHeight = newHeight;
+        // Re-calculate initial camera position based on new dimensions?
+        // Or let the regular updateCamera handle it? Let updateCamera handle it.
+    }
 
     updateCamera(): void {
          const viewportWidth = this.coreRenderer.getWidth();
@@ -132,11 +144,31 @@ export class SceneRenderer {
 
     private drawStaticObjects(): void {
         this.entityManager.staticObjects.forEach(obj => {
-            const objImg = this.assetLoader.getImage(obj.svgPath);
-            if (objImg) {
-                 // Renderer.drawImage expects 6 args: image, x, y, w, h, rotation
-                 this.coreRenderer.drawImage(objImg, obj.x, obj.y, obj.width, obj.height, 0);
+            let assetPath: string | undefined = undefined;
+
+            if (obj instanceof Tree || obj instanceof House) {
+                assetPath = obj.svgPath; // Existing logic for Tree/House
+            } else if (obj instanceof DoorExit) {
+                const config = PLACEABLE_OBJECT_CONFIG['DoorExit'];
+                if (config) {
+                    assetPath = config.assetPath;
+                }
             }
+
+            if (assetPath) {
+                const objImg = this.assetLoader.getImage(assetPath);
+                if (objImg) {
+                    // Renderer.drawImage expects 6 args: image, x, y, w, h, rotation
+                    this.coreRenderer.drawImage(objImg, obj.x, obj.y, obj.width, obj.height, 0);
+                } else {
+                    // Draw placeholder if asset not found/loaded
+                     this.coreRenderer.drawPlaceholder(obj.x, obj.y, 'red'); 
+                }
+            } else {
+                // Draw placeholder if asset path couldn't be determined
+                this.coreRenderer.drawPlaceholder(obj.x, obj.y, 'purple'); 
+            }
+
             // Draw Tree Health Bar
             if (obj instanceof Tree && obj.state === 'STANDING' && obj.currentHealth < obj.maxHealth) {
                 // Renderer.drawHealthBar expects 6 args: x, y, w, current, max

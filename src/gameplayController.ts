@@ -7,6 +7,8 @@ import { AudioPlayer } from './audio';
 import { ItemType } from './item'; // Import ItemType
 import { Tree } from './tree'; // Import Tree for instanceof check
 import { House } from './house'; // Import House type if needed
+import { DoorExit } from './doorExit'; // Import DoorExit
+import { Game } from './game'; // Import Game
 
 // Define a simple structure for collision checks
 interface BoundingBox {
@@ -24,6 +26,7 @@ export class GameplayController {
     private readonly actionCooldown: number = 500; // Milliseconds
 
     constructor(
+        private game: Game, // Add Game instance
         private inputHandler: InputHandler,
         private player: Player,
         private entityManager: EntityManager,
@@ -39,6 +42,7 @@ export class GameplayController {
         this.handleToolUsage();
         this.handleItemPickup();
         this.handleItemDrop();
+        this.checkExitTrigger(); // Check for exit trigger AFTER movement/actions
 
         // Update closest item for UI prompt (could be moved to a separate UI controller later)
         this.updateClosestPickupItem();
@@ -101,6 +105,11 @@ export class GameplayController {
                      continue;
                  }
                  
+                 // Ignore collision with DoorExit objects for movement blocking
+                 if (obj instanceof DoorExit) {
+                     continue;
+                 }
+                 
                  // Define the object's bounds for collision check
                  let objBounds: BoundingBox;
                  if (obj instanceof House) {
@@ -117,7 +126,7 @@ export class GameplayController {
                      objBounds = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
                  }
 
-                 if (this.checkCollision(playerBounds, objBounds)) {
+                 if (EntityManager.checkCollision(playerBounds, objBounds)) { // Use static checkCollision
                      collisionDetected = true;
                      break;
                  }
@@ -149,37 +158,40 @@ export class GameplayController {
     private checkDoorEntry(): void {
         for (const obj of this.entityManager.staticObjects) {
             if (obj instanceof House) {
-                const house = obj;
-                // Estimate door bounds, ensuring calculation MATCHES debug visual in scene.ts
+                const house = obj; // Now we have the specific house instance
+                
+                // --- Calculate door bounds (Offset already adjusted to 15) --- 
                 const doorWidth = house.width / 4;
-                const doorTopMargin = 15; // How far inside the house the detection starts
-                const doorBottomMargin = 60; // INCREASED: How far below the house the detection ends
-                const doorXOffset = 20; // Horizontal offset
-
+                const doorTopMargin = 15; 
+                const doorBottomMargin = 60; 
+                const doorXOffset = 0; 
                 const houseBottomY = house.y + house.height / 2;
                 const doorTopY = houseBottomY - doorTopMargin;
                 const doorBottomY = houseBottomY + doorBottomMargin;
-                const doorHeight = doorBottomY - doorTopY; // Effective detection height
-
+                const doorHeight = doorBottomY - doorTopY;
                 const doorX = house.x - doorWidth / 2 + doorXOffset; 
                 const doorBounds: BoundingBox = { x: doorX, y: doorTopY, width: doorWidth, height: doorHeight }; 
                 
-                // Use player's *current* center position
                 const playerCenterX = this.player.x;
                 const playerCenterY = this.player.y;
                 
-                // REMOVED DEBUGGING
-                // console.log(`House Check: BottomY=${houseBottomY.toFixed(1)}`);
-                // console.log(`  Door Check: X=[${doorBounds.x.toFixed(1)}, ${(doorBounds.x + doorBounds.width).toFixed(1)}], Y=[${doorBounds.y.toFixed(1)}, ${(doorBounds.y + doorBounds.height).toFixed(1)}] (TopY=${doorTopY.toFixed(1)}, BottomY=${doorBottomY.toFixed(1)})`);
-                // console.log(`  Player Center: x=${playerCenterX.toFixed(1)}, y=${playerCenterY.toFixed(1)}`);
-
-                if (
-                    playerCenterX >= doorBounds.x && playerCenterX <= doorBounds.x + doorBounds.width &&
-                    playerCenterY >= doorBounds.y && playerCenterY <= doorBounds.y + doorBounds.height // Check within the full height
-                ) {
-                    console.log(`Player IS INSIDE door bounds of House at (${house.x.toFixed(0)}, ${house.y.toFixed(0)})!`);
-                    // Scene transition logic will go here later.
-                    // Potentially add a small cooldown or flag to prevent rapid re-entry?
+                // Check if player center is inside the door bounds
+                if (playerCenterX >= doorBounds.x && playerCenterX <= doorBounds.x + doorBounds.width &&
+                    playerCenterY >= doorBounds.y && playerCenterY <= doorBounds.y + doorBounds.height) {
+                    
+                    const interiorSceneId = `interior-${house.id}`;
+                    const originSceneId = this.game.getCurrentSceneId(); // Get the ID of the scene we are leaving
+                    const exitTargetPosition = { x: playerCenterX, y: playerCenterY + 40 }; // Position slightly below entry
+                    
+                    console.log(`Player entered door of House ID: ${house.id}. Triggering scene change to [${interiorSceneId}]...`);
+                    console.log(`  Origin scene: ${originSceneId}, Exit target pos: (${exitTargetPosition.x.toFixed(0)}, ${exitTargetPosition.y.toFixed(0)})`);
+                    
+                    // Call changeScene with context data
+                    this.game.changeScene(interiorSceneId, {
+                        originSceneId: originSceneId,
+                        exitTargetPosition: exitTargetPosition
+                    }); 
+                    return; // Exit loop once a door is entered
                 }
             }
         }
@@ -347,5 +359,33 @@ export class GameplayController {
         return collisionX && collisionY;
     }
     // --- End Collision Helpers ---
+
+    // --- Exit Trigger Check Method --- 
+    private checkExitTrigger(): void {
+        for (const obj of this.entityManager.staticObjects) {
+            // Check if the object is a DoorExit
+            if (obj instanceof DoorExit) {
+                const exitDoor = obj;
+                
+                // Check collision between player center and the door exit bounds
+                // Use simple AABB check with player center as a point
+                const playerBounds: BoundingBox = { x: this.player.x, y: this.player.y, width: 1, height: 1 };
+                const doorBounds: BoundingBox = { x: exitDoor.x, y: exitDoor.y, width: exitDoor.width, height: exitDoor.height };
+                
+                if (EntityManager.checkCollision(playerBounds, doorBounds)) {
+                    // Check if the door has a valid target
+                    if (exitDoor.targetSceneId && exitDoor.targetPosition) {
+                        console.log(`Player collided with DoorExit. Target: Scene=${exitDoor.targetSceneId}, Pos=(${exitDoor.targetPosition.x.toFixed(0)}, ${exitDoor.targetPosition.y.toFixed(0)})`);
+                        // Trigger scene change with the target position
+                        this.game.changeScene(exitDoor.targetSceneId, { targetPosition: exitDoor.targetPosition });
+                        return; // Exit loop after triggering
+                    } else {
+                        console.warn(`Player collided with DoorExit, but it has no valid targetSceneId or targetPosition.`);
+                    }
+                }
+            }
+        }
+    }
+    // --- End Exit Trigger Check ---
 
 } 

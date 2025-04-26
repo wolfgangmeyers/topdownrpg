@@ -7,6 +7,8 @@ import { TerrainType, getTerrainConfig } from './terrain';
 import { getItemConfig } from './item'; // For item preview
 import { Tree } from './tree'; // For type checking
 import { House } from './house'; // For type checking
+import { DoorExit } from './doorExit'; // Import DoorExit
+import { deleteSceneState } from './db'; // Import scene delete function
 // Removed Renderer import
 
 // Data structure for placement preview info
@@ -43,12 +45,24 @@ export class CreativeController {
 
         // --- Handle Deletion ---
         if (this.inputHandler.deletePressed) {
-             // Find object under cursor to remove
              const objectToRemove = this.entityManager.getObjectAt(mouseWorldX, mouseWorldY);
              if (objectToRemove) {
+                 // Check if it's a House before removing
+                 if (objectToRemove instanceof House) {
+                     const house = objectToRemove;
+                     const interiorSceneId = `interior-${house.id}`;
+                     console.log(`Deleting House ID: ${house.id}. Attempting to delete associated scene: ${interiorSceneId}`);
+                     // Asynchronously delete the scene state, don't necessarily wait
+                     deleteSceneState(interiorSceneId).catch(err => {
+                         console.error(`Failed to delete interior scene [${interiorSceneId}] for deleted house:`, err);
+                     });
+                 }
+                 // Remove the object itself from the current scene
                  this.entityManager.removeStaticObject(objectToRemove);
              }
-             // TODO: Add terrain removal? (e.g., right-click or specific tool)
+             // Reset flag immediately after processing to prevent multi-delete
+             // (Though resetFrameState also handles this later)
+             // this.inputHandler.deletePressed = false; // Already handled by resetFrameState
         }
 
         // --- Handle Placement ---
@@ -87,19 +101,38 @@ export class CreativeController {
             return; // Ensure asset is loaded
         }
 
+        // Use the natural SVG dimensions for placement
         const objWidth = objImg.naturalWidth;
         const objHeight = objImg.naturalHeight;
 
-        let newObject: Tree | House | null = null;
+        let newObject: Tree | House | DoorExit | null = null; // Add DoorExit to type
         if (objectType === 'Tree') {
             newObject = new Tree(x, y, objWidth, objHeight);
         } else if (objectType === 'House') {
             newObject = new House(x, y, objWidth, objHeight);
+        } else if (objectType === 'DoorExit') { // Handle DoorExit placement
+            newObject = new DoorExit(x, y, objWidth, objHeight);
         }
 
         if (newObject) {
-             this.entityManager.addStaticObject(newObject); // Use method in EntityManager
-             console.log(`Placed ${objectType} at (${x.toFixed(0)}, ${y.toFixed(0)})`);
+             // Check collision before adding (using EntityManager helper)
+             let collisionDetected = false;
+             const newObjectBounds: BoundingBox = { x: newObject.x, y: newObject.y, width: newObject.width, height: newObject.height };
+             for (const existingObj of this.entityManager.staticObjects) {
+                 const existingObjBounds: BoundingBox = { x: existingObj.x, y: existingObj.y, width: existingObj.width, height: existingObj.height };
+                 if (EntityManager.checkCollision(newObjectBounds, existingObjBounds)) {
+                     collisionDetected = true;
+                     break;
+                 }
+             }
+
+             if (!collisionDetected) {
+                this.entityManager.addStaticObject(newObject); // Use method in EntityManager
+                console.log(`Placed ${objectType} at (${x.toFixed(0)}, ${y.toFixed(0)})`);
+             } else {
+                console.log(`Placement blocked for ${objectType} at (${x.toFixed(0)}, ${y.toFixed(0)})`);
+                // Optional: Play a 'cannot place' sound or show visual feedback
+             }
         } else {
              console.warn('Failed to create object instance for:', objectType);
         }
@@ -153,4 +186,13 @@ export class CreativeController {
         return null;
     }
 
+}
+
+// (Define BoundingBox interface if not imported/global)
+// TODO: Move BoundingBox to a shared location (e.g., utils.ts)
+interface BoundingBox { 
+    x: number; 
+    y: number; 
+    width: number; 
+    height: number; 
 } 

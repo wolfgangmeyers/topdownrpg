@@ -33,6 +33,7 @@ export class Game {
     private assetLoader: AssetLoader;
     private player: Player | null = null; // Keep player reference if needed globally
     private currentScene: Scene | null = null;
+    private currentSceneId: string = 'defaultForest'; // Track current scene ID, default
     private audioPlayer: AudioPlayer; // Add AudioPlayer instance
     private creativeModeSelector: CreativeModeSelector; // Add the selector instance
     private isLoading: boolean = true; // Flag to check if initial loading is done
@@ -84,14 +85,14 @@ export class Game {
             // --- Load Player Data (from localStorage) ---
             const savedPlayerData = this.loadPlayerData();
             let initialPlayerPos = { x: this.renderer.getWidth() / 2, y: this.renderer.getHeight() / 2 };
-            let initialSceneId = 'defaultForest'; // Default scene ID
+            // Load currentSceneId from save data if available
+            this.currentSceneId = savedPlayerData ? savedPlayerData.currentSceneId : 'defaultForest';
 
             if (savedPlayerData) {
                 initialPlayerPos = savedPlayerData.position;
-                initialSceneId = savedPlayerData.currentSceneId;
-                console.log(`Player save data found: Starting in scene [${initialSceneId}] at (${initialPlayerPos.x.toFixed(0)}, ${initialPlayerPos.y.toFixed(0)})`);
+                console.log(`Player save data found: Starting in scene [${this.currentSceneId}] at (${initialPlayerPos.x.toFixed(0)}, ${initialPlayerPos.y.toFixed(0)})`);
             } else {
-                 console.log(`No player save data found. Starting in default scene: ${initialSceneId}`);
+                 console.log(`No player save data found. Starting in default scene: ${this.currentSceneId}`);
             }
             // --- End Load Player Data ---
 
@@ -194,83 +195,73 @@ export class Game {
             // --- End Creative Mode Init ---
 
             // Load the initial scene using the determined ID
-            // For now, we only have GameScene, use the ID
-            // Pass the player instance (must not be null here)
             if (!this.player) throw new Error("Player not initialized before scene creation!");
-            this.currentScene = new GameScene(initialSceneId, this.renderer, this.inputHandler, this.assetLoader, this.player, this.audioPlayer);
-            await this.currentScene.load(); // Load scene-specific assets and populate
-
-            // Ensure player position is correctly set from save data *after* scene potentially repositioning
-            // Although in current setup, scene doesn't move player on load.
-            // If scene load logic *did* reset player pos, we'd re-apply here:
-            // if (savedPlayerData) { 
-            //    this.player.x = initialPlayerPos.x;
-            //    this.player.y = initialPlayerPos.y;
-            // }
+            
+            // Create GameScene instance (constructor updated separately)
+            this.currentScene = new GameScene(this.currentSceneId, this, this.renderer, this.inputHandler, this.assetLoader, this.player, this.audioPlayer);
+            await this.currentScene.load(); // Load scene state
 
             this.isLoading = false;
-            console.log('Game initialized and initial scene loaded.');
+            console.log("Game initialization complete.");
+            requestAnimationFrame(this.update.bind(this));
 
             // Initialize NPCs later
             // this.npcs.push(new NPC('npc1', 100, 100, '/assets/svg/npc.svg', ['Hello there!']));
             // await this.assetLoader.loadImages(this.npcs.map(npc => npc.svgPath)); // Load NPC assets too
 
         } catch (error) {
-            console.error("Failed to initialize game:", error);
-            // Display error to user?
+            console.error("Game initialization failed:", error);
+            this.isLoading = false; // Ensure loading state is false even on error
+             // Optionally display an error message on the canvas
+            this.renderer.clear();
+            this.renderer.drawText('Error during initialization. Check console.', 50, 50, 'red', '16px Arial');
         }
     }
 
     // --- Player Data Persistence (kept in Game for now) ---
     private savePlayerData(): void {
+        if (!this.player) return;
+        const data: PlayerSaveData = {
+            currentSceneId: this.currentSceneId,
+            position: { x: this.player.x, y: this.player.y },
+            // Corrected inventory mapping to use slot.item.id
+            inventory: Array.from(this.player.inventory.values()).map(slot => ({ id: slot.item.id, quantity: slot.quantity })),
+            equippedItemId: this.player.equippedItemId
+        };
         try {
-            if (!this.player || !this.currentScene) { // Also check currentScene for sceneId
-                console.error("Cannot save player data: Player or Scene not available.");
-                return;
-            }
-            // Construct save data directly
-            const saveData: PlayerSaveData = {
-                 currentSceneId: this.currentScene.getId(),
-                 position: { x: this.player.x, y: this.player.y },
-                 inventory: Array.from(this.player.inventory.entries()).map(([id, slot]) => ({ id, quantity: slot.quantity })), // Serialize inventory
-                 equippedItemId: this.player.equippedItemId
-            };
-            localStorage.setItem('playerSaveData', JSON.stringify(saveData));
-            console.log('Player data saved to localStorage.');
+            localStorage.setItem(PLAYER_SAVE_KEY, JSON.stringify(data));
+            console.log("Player data saved.");
         } catch (error) {
-            console.error('Failed to save player data:', error);
+            console.error("Error saving player data to localStorage:", error);
         }
     }
 
     private loadPlayerData(): PlayerSaveData | null {
         try {
-            const savedData = localStorage.getItem('playerSaveData');
-            if (savedData) {
-                const parsedData = JSON.parse(savedData);
-                // Add basic validation
-                if (parsedData && parsedData.position && Array.isArray(parsedData.inventory)) {
-                    console.log('Player data loaded from localStorage.');
-                    return parsedData as PlayerSaveData;
-                } else {
-                     console.warn('Loaded player data has invalid format. Discarding.');
-                     localStorage.removeItem('playerSaveData');
-                     return null;
+            const saved = localStorage.getItem(PLAYER_SAVE_KEY);
+            if (saved) {
+                const data = JSON.parse(saved) as PlayerSaveData;
+                // Basic validation
+                if (data && typeof data.currentSceneId === 'string' && data.position && typeof data.position.x === 'number') {
+                    return data;
                 }
-            } else {
-                console.log('No player save data found.');
-                return null;
             }
         } catch (error) {
-            console.error('Failed to load player data:', error);
-            // Clear potentially corrupt data
-            localStorage.removeItem('playerSaveData');
-            return null;
+            console.error("Error loading player data from localStorage:", error);
         }
+        return null;
     }
     // --- End Player Data --- 
 
     public update(timestamp: number): void {
-        if (this.isLoading || !this.currentScene || !this.player) return; // Add player check
+        if (this.isLoading) {
+             this.renderer.clear(); // Call clear with no arguments
+             // Use correct font string format
+             this.renderer.drawText('Loading...', this.renderer.getWidth() / 2 - 50, this.renderer.getHeight() / 2, 'white', '24px Arial'); 
+             requestAnimationFrame(this.update.bind(this)); 
+             return; 
+        }
+        if (!this.currentScene || !this.player) return; // Add player check
 
         const deltaTime = (timestamp - (this.lastTimestamp || timestamp)) / 1000; // Delta time in seconds
         this.lastTimestamp = timestamp;
@@ -296,12 +287,26 @@ export class Game {
             // this.creativeModeSelector.selectedTerrainType = null;
         }
 
-        // Check for Save action
-        if (this.inputHandler.saveKeyPressed && this.currentScene instanceof GameScene) {
-            // Save Scene to IndexedDB
-            this.currentScene.save(); 
-            // Save Player Data to LocalStorage
-            this.savePlayerData();
+        // Check for Save action (Manual F5)
+        if (this.inputHandler.saveKeyPressed) {
+            this.saveGame(); // Call the unified save method
+        }
+
+        // TEMP: Check for Debug Teleport
+        if (this.inputHandler.teleportDebugPressed) {
+            console.log("Debug Teleport Key Pressed: Saving current scene first...");
+            // Save current scene state BEFORE changing
+            this.currentScene.save().then(() => { 
+                console.log("Current scene saved, proceeding with teleport...");
+                this.changeScene('defaultForest');
+            }).catch(err => {
+                console.error("Error saving scene before teleport:", err);
+                // Decide if we should still teleport or not?
+                // For now, let's still teleport even if save fails.
+                this.changeScene('defaultForest');
+            });
+            // Exit update early to prevent further processing while async save/change happens
+            return; 
         }
 
         // --- Handle UI Interactions --- 
@@ -315,7 +320,10 @@ export class Game {
         }
         // --- End UI Interactions ---
 
-        // Reset input handler flags for next frame
+        // Reset input handler flags for next frame (moved after teleport check)
+        // This ensures the teleport flag itself gets reset eventually if teleport doesn't exit early
+        // However, the return above makes this redundant for the teleport case.
+        // It's still needed for other flags.
         this.inputHandler.resetFrameState();
     }
 
@@ -405,7 +413,8 @@ export class Game {
     // --- End Handle Inventory Click ---
 
     public draw(): void {
-        if (this.isLoading || !this.currentScene) {
+        if (this.isLoading) return; // Don't draw game world while loading
+        if (!this.currentScene) {
             // Optional: Draw loading state
             this.renderer.clear();
             const ctx = this.renderer.getContext();
@@ -458,4 +467,77 @@ export class Game {
              console.error("Failed to save game:", error);
          }
      }
+
+    // --- Scene Transition Method ---
+    public async changeScene(newSceneId: string, contextData?: any): Promise<void> {
+        if (!this.player || !this.currentScene) return;
+        const oldSceneId = this.currentSceneId;
+
+        console.log(`Changing scene from ${oldSceneId} to ${newSceneId}`);
+        this.isLoading = true; 
+
+        // 1. Save the *outgoing* scene state
+        console.log(`Saving state for outgoing scene [${oldSceneId}]...`);
+        try {
+            await this.currentScene.save(); 
+            console.log(`Outgoing scene [${oldSceneId}] saved.`);
+        } catch (error) {
+            console.error(`Error saving outgoing scene [${oldSceneId}]:`, error);
+        }
+
+        // 2. Update player state to reflect the *new* scene ID
+        this.currentSceneId = newSceneId; 
+        this.savePlayerData(); 
+
+        // 3. Create and load the new scene instance
+        // Pass contextData to the GameScene constructor
+        this.currentScene = new GameScene(newSceneId, this, this.renderer, this.inputHandler, this.assetLoader, this.player, this.audioPlayer, contextData);
+        await this.currentScene.load();
+
+        // 4. Reset player position in the new scene
+        // Check if we are entering a house interior
+        if (newSceneId.startsWith('interior-')) {
+             // Position player near the exit door (bottom center)
+             // Assuming 10x10 grid and 64 tileSize for interiors
+             const interiorCols = 10;
+             const interiorRows = 10;
+             const tileSize = this.currentScene.getTileSize(); // Get tileSize from scene
+             
+             const targetPlayerX = (interiorCols / 2) * tileSize;
+             // Place player one tile row above the exit door row (row 9 -> row 8)
+             const targetPlayerY = (interiorRows - 2) * tileSize + tileSize / 2; 
+             
+             this.player.x = targetPlayerX;
+             this.player.y = targetPlayerY;
+             console.log(`Player position set near exit in interior scene ${newSceneId} to (${this.player.x.toFixed(0)}, ${this.player.y.toFixed(0)})`);
+        }
+        // Check for targetPosition passed via context (e.g., exiting a house)
+        else if (contextData && contextData.targetPosition && 
+            typeof contextData.targetPosition.x === 'number' && 
+            typeof contextData.targetPosition.y === 'number') 
+        {
+            this.player.x = contextData.targetPosition.x;
+            this.player.y = contextData.targetPosition.y;
+            console.log(`Player position set from context data in scene ${newSceneId} to (${this.player.x.toFixed(0)}, ${this.player.y.toFixed(0)})`);
+        } else {
+            // Fallback to center for other scenes (like defaultForest or roadRoom)
+            const dimensions = this.currentScene.getWorldDimensions(); 
+            this.player.x = dimensions.width / 2;
+            this.player.y = dimensions.height / 2;
+            console.log(`Player position reset to center in new scene ${newSceneId} to (${this.player.x.toFixed(0)}, ${this.player.y.toFixed(0)})`);
+        }
+
+        // 5. Reset input state
+        this.inputHandler.resetFrameState(); 
+        this.inputHandler.resetMovement(); 
+
+        this.isLoading = false; 
+        console.log(`Scene changed successfully to ${newSceneId}.`);
+    }
+    // --- End Scene Transition ---
+
+    // Add getter for current scene ID
+    public getCurrentSceneId(): string {
+        return this.currentSceneId;
+    }
 } 

@@ -1,16 +1,21 @@
 /**
  * Defines the types of terrain available in the game.
  */
-export type TerrainType = 'grass' | 'road' | 'water'; // Added water
+export const TerrainType = {
+    GRASS: 'grass',
+    ROAD: 'road',
+    WATER: 'water',
+    WOOD_FLOOR: 'wood-floor'
+} as const;
+
+// Define the type based on the constant values
+export type TerrainType = typeof TerrainType[keyof typeof TerrainType];
 
 /**
  * Interface for terrain configuration.
  */
 export interface TerrainConfig {
-    id: TerrainType;
-    name: string; // Display name
     assetPath: string; // Path to the SVG tile image
-    isPlaceable: boolean; // Can this be placed in creative mode?
     isWalkable: boolean; // Can the player walk on this tile?
     // Add other properties later? e.g., walkability, cost, etc.
 }
@@ -19,26 +24,21 @@ export interface TerrainConfig {
  * Configuration mapping for different terrain types.
  */
 export const TERRAIN_CONFIG: Record<TerrainType, TerrainConfig> = {
-    grass: {
-        id: 'grass',
-        name: 'Grass',
+    [TerrainType.GRASS]: {
         assetPath: '/assets/tiles/grass.svg',
-        isPlaceable: true, // Grass can be placed
         isWalkable: true,
     },
-    road: {
-        id: 'road',
-        name: 'Road',
+    [TerrainType.ROAD]: {
         assetPath: '/assets/tiles/road.svg',
-        isPlaceable: true, // Road can be placed
         isWalkable: true,
     },
-    water: {
-        id: 'water',
-        name: 'Water',
-        assetPath: '/assets/tiles/water.svg', // Assuming this asset exists
-        isPlaceable: true,
-        isWalkable: false, // Water is not walkable
+    [TerrainType.WATER]: {
+        assetPath: '/assets/tiles/water.svg',
+        isWalkable: false,
+    },
+    [TerrainType.WOOD_FLOOR]: {
+        assetPath: '/assets/tiles/wood-floor.svg',
+        isWalkable: true,
     },
 };
 

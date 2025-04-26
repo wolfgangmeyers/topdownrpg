@@ -9,6 +9,9 @@ import { saveSceneState, loadSceneState } from './db';
 import { Item, ItemType, getItemConfig } from './item'; // Import Item types and getter
 import { AudioPlayer } from './audio'; // Import AudioPlayer
 import { TerrainType, TERRAIN_CONFIG, getTerrainConfig, TerrainConfig } from './terrain'; // Import terrain types and config
+import { SceneRenderer } from './sceneRenderer';
+import { Game } from './game'; // Import Game
+import { DoorExit } from './doorExit'; // Import DoorExit
 
 // --- Dropped Item Structure ---
 export interface DroppedItem {
@@ -42,7 +45,6 @@ import { TerrainManager } from './terrainManager';
 import { SceneStateManager } from './sceneStateManager';
 import { GameplayController } from './gameplayController';
 import { CreativeController, PlacementPreviewInfo, HighlightInfo } from './creativeController'; // Import interfaces too
-import { SceneRenderer } from './sceneRenderer';
 
 // Define BoundingBox interface locally if not imported globally
 // Must match the structure used in Renderer/SceneRenderer
@@ -58,6 +60,7 @@ interface DebugBound {
 }
 
 export abstract class Scene {
+    protected game: Game; // Add reference to Game instance
     protected renderer: Renderer;
     protected inputHandler: InputHandler;
     protected assetLoader: AssetLoader;
@@ -68,8 +71,9 @@ export abstract class Scene {
     // Maybe add generic game object list later
     // protected gameObjects: any[] = [];
 
-    constructor(sceneId: string, renderer: Renderer, inputHandler: InputHandler, assetLoader: AssetLoader, player: Player, audioPlayer: AudioPlayer) {
+    constructor(sceneId: string, game: Game, renderer: Renderer, inputHandler: InputHandler, assetLoader: AssetLoader, player: Player, audioPlayer: AudioPlayer) {
         this.sceneId = sceneId;
+        this.game = game; // Store Game instance
         this.renderer = renderer;
         this.inputHandler = inputHandler;
         this.assetLoader = assetLoader;
@@ -85,6 +89,8 @@ export abstract class Scene {
     abstract update(deltaTime: number, creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null): void;
     abstract draw(creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null): void;
     abstract save(): Promise<void>; // Add save method requirement
+    abstract getWorldDimensions(): { width: number; height: number }; // Add requirement for dimensions
+    abstract getTileSize(): number; // Add requirement for tile size
 }
 
 export class GameScene extends Scene {
@@ -113,49 +119,140 @@ export class GameScene extends Scene {
     private creativeController: CreativeController;
     private sceneRenderer: SceneRenderer;
     // --- End Managers ---
+    private contextData: any; // Store context passed during scene change
 
-    constructor(sceneId: string, renderer: Renderer, inputHandler: InputHandler, assetLoader: AssetLoader, player: Player, audioPlayer: AudioPlayer) {
-        super(sceneId, renderer, inputHandler, assetLoader, player, audioPlayer);
+    constructor(
+        sceneId: string, 
+        game: Game, 
+        renderer: Renderer, 
+        inputHandler: InputHandler, 
+        assetLoader: AssetLoader, 
+        player: Player, 
+        audioPlayer: AudioPlayer,
+        contextData?: any // Add optional contextData parameter
+    ) {
+        super(sceneId, game, renderer, inputHandler, assetLoader, player, audioPlayer);
+        this.contextData = contextData; // Store the context
 
         // Instantiate Managers/Controllers
         this.entityManager = new EntityManager(assetLoader, audioPlayer);
         this.terrainManager = new TerrainManager(this.worldWidth, this.worldHeight, this.tileSize);
         this.stateManager = new SceneStateManager(this.entityManager, this.terrainManager, assetLoader);
-        this.gameplayController = new GameplayController(inputHandler, player, this.entityManager, this.terrainManager, audioPlayer, this.worldWidth, this.worldHeight, this.tileSize);
+        this.gameplayController = new GameplayController(game, inputHandler, player, this.entityManager, this.terrainManager, audioPlayer, this.worldWidth, this.worldHeight, this.tileSize);
         this.creativeController = new CreativeController(inputHandler, this.entityManager, this.terrainManager, assetLoader, this.tileSize);
         this.sceneRenderer = new SceneRenderer(renderer, assetLoader, this.entityManager, this.terrainManager, player, this.worldWidth, this.worldHeight, this.tileSize);
     }
 
+    // --- Get World Dimensions --- 
+    public getWorldDimensions(): { width: number; height: number } {
+        // Return dimensions based on the current state of TerrainManager
+        const dims = this.terrainManager.getGridDimensions();
+        return {
+            width: dims.cols * this.tileSize,
+            height: dims.rows * this.tileSize
+        };
+    }
+    // --- End Get World Dimensions ---
+
+    // --- Get Tile Size --- 
+    public getTileSize(): number {
+        return this.tileSize;
+    }
+    // --- End Get Tile Size ---
+
     async load(): Promise<void> {
-        // Load common scene assets (terrain tiles) - Objects/items loaded by StateManager if needed
         try {
-            console.log("GameScene: Loading common assets...");
+            console.log(`GameScene [${this.sceneId}]: Loading common assets...`);
             const terrainAssetPaths = Object.values(TERRAIN_CONFIG).map((config: TerrainConfig) => config.assetPath);
             await this.assetLoader.loadImages(terrainAssetPaths);
-            console.log('Loaded terrain tile assets:', terrainAssetPaths);
+            console.log(`Loaded terrain tile assets for [${this.sceneId}]:`, terrainAssetPaths);
 
-            // Attempt to load saved state using the StateManager
+            // Attempt to load saved state
             const loadedSuccessfully = await this.stateManager.loadState(this.sceneId);
 
-            // Populate with defaults ONLY if no save data was loaded
             if (!loadedSuccessfully) {
-                console.log("GameScene: Populating with default objects...");
-                // Use EntityManager to populate default trees
-                this.entityManager.populateTrees(15, this.worldWidth, this.worldHeight);
-                // TerrainManager already initializes default grid in constructor
-                console.log('GameScene populated with defaults.');
+                console.log(`GameScene [${this.sceneId}]: No saved state found. Generating default layout...`);
+                this.generateDefaultLayout(); // Call helper method
             } else {
-                console.log('GameScene loaded from saved state.');
+                console.log(`GameScene [${this.sceneId}] loaded from saved state.`);
             }
 
-        } catch (error) {
-            console.error("Failed to load GameScene assets or state:", error);
             // Fallback: Ensure default terrain exists even if state load fails partially
             if (this.terrainManager.getGrid().length === 0) {
+                 console.warn(`GameScene [${this.sceneId}]: Forcing terrain grid initialization after load error.`);
+                 this.terrainManager.initializeTerrainGrid();
+            }
+        } catch (error) {
+            console.error(`Failed to load GameScene [${this.sceneId}] assets or state:`, error);
+            if (this.terrainManager.getGrid().length === 0) {
+                 console.warn(`GameScene [${this.sceneId}]: Forcing terrain grid initialization after load error.`);
                  this.terrainManager.initializeTerrainGrid();
             }
         }
+        
+        // --- Update SceneRenderer with potentially new dimensions --- 
+        const currentDimensions = this.getWorldDimensions();
+        this.sceneRenderer.updateWorldDimensions(currentDimensions.width, currentDimensions.height);
+        // --- End Update --- 
     }
+    
+    // --- Helper for Default Layout Generation --- 
+    private generateDefaultLayout(): void {
+        this.entityManager.clearAll();
+        
+        if (this.sceneId.startsWith('interior-')) {
+            const interiorRows = 10;
+            const interiorCols = 10;
+            console.log(`GameScene [${this.sceneId}]: Generating ${interiorCols}x${interiorRows} interior layout.`);
+            
+            this.terrainManager.resizeGrid(interiorRows, interiorCols);
+            this.terrainManager.fillGridWith(TerrainType.WOOD_FLOOR);
+
+            const exitX = (interiorCols / 2) * this.tileSize; 
+            const exitY = (interiorRows - 1) * this.tileSize + this.tileSize / 2; 
+            
+            const doorConfig = PLACEABLE_OBJECT_CONFIG['DoorExit'];
+            if (doorConfig) {
+                const doorImg = this.assetLoader.getImage(doorConfig.assetPath);
+                if (doorImg) {
+                    const doorWidth = doorImg.naturalWidth;
+                    const doorHeight = doorImg.naturalHeight;
+                    const exitDoor = new DoorExit(exitX, exitY, doorWidth, doorHeight);
+                    
+                    // Set the exit target using contextData passed during scene change
+                    if (this.contextData && this.contextData.originSceneId && this.contextData.exitTargetPosition) {
+                        exitDoor.setTarget(this.contextData.originSceneId, this.contextData.exitTargetPosition);
+                        console.log(`  Set DoorExit target: Scene=${exitDoor.targetSceneId}, Pos=(${exitDoor.targetPosition?.x.toFixed(0)}, ${exitDoor.targetPosition?.y.toFixed(0)})`);
+                    } else {
+                        console.warn(`  Could not set DoorExit target: Missing contextData (originSceneId or exitTargetPosition).`);
+                        // Fallback? Or leave target as null? For now, leave null.
+                    }
+
+                    this.entityManager.addStaticObject(exitDoor);
+                    console.log(`Placed DoorExit in interior at (${exitX.toFixed(0)}, ${exitY.toFixed(0)})`);
+                } else {
+                    console.error("Could not place DoorExit: Asset not loaded.");
+                }
+            } else {
+                 console.error("Could not place DoorExit: Config not found.");
+            }
+            
+        } else if (this.sceneId === 'roadRoom') {
+            console.log(`GameScene [${this.sceneId}]: Generating road room layout.`);
+            // Use default grid size (implicitly set by constructor/resize)
+            this.terrainManager.fillGridWith(TerrainType.ROAD);
+            // No objects
+        } else {
+            // Default layout (e.g., 'defaultForest')
+            console.log(`GameScene [${this.sceneId}]: Generating default forest layout.`);
+            // Ensure default grid size is used if load failed
+            this.terrainManager.resizeGrid(Math.ceil(this.worldHeight / this.tileSize), Math.ceil(this.worldWidth / this.tileSize));
+            this.entityManager.populateTrees(15, this.worldWidth, this.worldHeight);
+            this.terrainManager.initializeTerrainGrid(); 
+        }
+        console.log(`GameScene [${this.sceneId}]: Default layout generated.`);
+    }
+    // --- End Default Layout ---
 
     update(deltaTime: number, creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null): void {
         // Delegate based on mode

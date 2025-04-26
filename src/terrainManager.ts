@@ -5,25 +5,27 @@ export class TerrainManager {
     private worldWidth: number;
     private worldHeight: number;
     private tileSize: number;
+    private rows: number;
+    private cols: number;
 
     constructor(worldWidth: number, worldHeight: number, tileSize: number) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.tileSize = tileSize;
+        this.rows = Math.ceil(this.worldHeight / this.tileSize);
+        this.cols = Math.ceil(this.worldWidth / this.tileSize);
         this.initializeTerrainGrid();
     }
 
     initializeTerrainGrid(): void {
-        const numCols = Math.ceil(this.worldWidth / this.tileSize);
-        const numRows = Math.ceil(this.worldHeight / this.tileSize);
-        console.log(`Initializing ${numRows}x${numCols} terrain grid with 'grass'.`);
         this.terrainGrid = [];
-        for (let y = 0; y < numRows; y++) {
+        for (let y = 0; y < this.rows; y++) {
             this.terrainGrid[y] = [];
-            for (let x = 0; x < numCols; x++) {
-                this.terrainGrid[y][x] = 'grass'; // Default to grass
+            for (let x = 0; x < this.cols; x++) {
+                this.terrainGrid[y][x] = TerrainType.GRASS;
             }
         }
+        console.log(`Initialized ${this.rows}x${this.cols} terrain grid with 'grass'.`);
     }
 
     getTileType(gridX: number, gridY: number): TerrainType | null {
@@ -67,26 +69,56 @@ export class TerrainManager {
     // Method to get grid dimensions if needed
     getGridDimensions(): { rows: number; cols: number } {
         return {
-            rows: this.terrainGrid.length,
-            cols: this.terrainGrid[0]?.length ?? 0
+            rows: this.rows,
+            cols: this.cols
         };
     }
 
     // Getter for the grid itself for saving/rendering
-    getGrid(): TerrainType[][] {
+    public getGrid(): Readonly<TerrainType[][]> {
         return this.terrainGrid;
     }
 
     // Setter for loading
-    setGrid(grid: TerrainType[][]): void {
-        // Basic validation
-        const expectedCols = Math.ceil(this.worldWidth / this.tileSize);
-        const expectedRows = Math.ceil(this.worldHeight / this.tileSize);
-        if (grid.length !== expectedRows || (grid[0]?.length ?? 0) !== expectedCols) {
-             console.warn(`Loaded terrain grid dimensions (${grid.length}x${grid[0]?.length ?? 0}) mismatch expected (${expectedRows}x${expectedCols}). Resetting to default.`);
-             this.initializeTerrainGrid();
-        } else {
-            this.terrainGrid = grid;
+    public setGrid(newGrid: TerrainType[][]): void {
+        // Validate the incoming grid structure minimally
+        if (!Array.isArray(newGrid) || newGrid.length === 0 || !Array.isArray(newGrid[0])) {
+            console.error("Failed to set terrain grid: Invalid grid format provided.");
+            // Fallback to default dimensions and initialize
+            this.rows = Math.ceil(this.worldHeight / this.tileSize); // Use original default dims
+            this.cols = Math.ceil(this.worldWidth / this.tileSize);
+            this.initializeTerrainGrid();
+            return;
+        }
+        
+        // Update internal dimensions based on the loaded grid
+        const newRows = newGrid.length;
+        const newCols = newGrid[0].length;
+        this.rows = newRows;
+        this.cols = newCols;
+        
+        // Assign the loaded grid
+        this.terrainGrid = newGrid;
+        console.log(`Terrain grid set from loaded data. New dimensions: ${this.rows}x${this.cols}`);
+    }
+
+    // Method to resize the grid and re-initialize (used for specific scenes like interiors)
+    public resizeGrid(newRows: number, newCols: number): void {
+        console.log(`Resizing terrain grid to ${newRows}x${newCols}`);
+        // Update stored dimensions
+        this.rows = newRows;
+        this.cols = newCols;
+        // Re-initialize the grid array with new dimensions (defaults to grass)
+        this.initializeTerrainGrid(); 
+    }
+
+    // Method to fill the entire grid with a specific terrain type
+    public fillGridWith(terrainType: TerrainType): void {
+        console.log(`Filling terrain grid with ${terrainType}`);
+        for (let y = 0; y < this.rows; y++) {
+            for (let x = 0; x < this.cols; x++) {
+                this.terrainGrid[y][x] = terrainType;
+            }
         }
     }
 } 
