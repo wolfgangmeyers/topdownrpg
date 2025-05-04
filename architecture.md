@@ -17,8 +17,8 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Manages the single `currentScene` instance and `currentSceneId`.
     *   Handles scene transitions via `changeScene(newSceneId, contextData?)`:
         *   Saves outgoing scene state (`currentScene.save()`).
-        *   Saves player state (`savePlayerData`) including the *new* `currentSceneId`.
-        *   Creates new `GameScene` instance, passing `contextData`.
+        *   Saves player data (`savePlayerData`) including the *new* `currentSceneId`.
+        *   Creates new `GameScene` instance, passing the `Game` instance and `contextData`.
         *   Calls `newScene.load()`.
         *   Positions player based on `contextData.targetPosition` or defaults (center for most scenes, near exit for interiors).
         *   Resets input state.
@@ -65,11 +65,20 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Handles saving/loading scene state (`staticObjects`, `droppedItems`, `terrainGrid`) to/from IndexedDB via `db.ts`.
     *   Serializes/deserializes entity state, including `House.id` and `DoorExit` target information (`targetSceneId`, `targetPosition`).
     *   Handles pre-loading of assets required by saved state.
+*   **`sceneTransitionSystem.ts`**: `SceneTransitionSystem` class.
+    *   Centralizes all scene transition logic in a dedicated module.
+    *   Defines the `Direction` enum (NORTH, EAST, SOUTH, WEST) used for grid-based navigation.
+    *   Handles three types of transitions:
+        *   `checkSceneEdgeTransition()`: Outdoor grid-based scene transitions with bidirectional linking.
+        *   `checkDoorEntry()`: House entry transitions into interior scenes.
+        *   `checkExitTrigger()`: Interior exit transitions back to the exterior world.
+    *   Manages coordinate systems and player positioning during transitions.
+    *   Provides collision detection for exit triggers.
 *   **`gameplayController.ts`**: `GameplayController` class.
     *   Receives `Game` instance in constructor.
+    *   Creates and manages a `SceneTransitionSystem` instance.
     *   Handles gameplay input/logic: movement (terrain/object collision, adjusted house bounds, ignores `DoorExit`), tool use, item pickup/drop.
-    *   `checkDoorEntry()`: Detects entry into `House` trigger zone, gets `house.id`, calculates exit position, calls `game.changeScene(\`interior-\${house.id}\`, contextData)`.
-    *   `checkExitTrigger()`: Detects collision with `DoorExit`, retrieves target info, calls `game.changeScene(targetSceneId, { targetPosition })`.
+    *   Delegates all scene transition logic to the `SceneTransitionSystem`.
     *   Provides getter for closest pickup item.
 *   **`creativeController.ts`**: `CreativeController` class.
     *   Handles creative mode input/logic: placement/removal of objects/terrain/items via `EntityManager`/`TerrainManager`.
@@ -98,8 +107,8 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Stores animation state (`isSwinging`, timers).
     *   Provides methods for movement (`move`), updates (`update` - rotation, animation), inventory management (`addItem`, `removeItem`, `equipItem`, etc.), and animation control (`startSwing`, `getSwingAngleOffset`).
 *   **`tree.ts`, `house.ts`**: Static object entity classes. (`Tree` includes health/state, `House` has `id`).
-*   **`doorExit.ts`**: New static object entity class. Stores `targetSceneId` and `targetPosition`. Has `setTarget` method.
-*   **`item.ts`**: Item definition module (`ItemType`, `Item` interface, `ITEM_CONFIG`, `getItemConfig`). (`door-exit` removed as item).
+*   **`doorExit.ts`**: Static object entity class. Stores `targetSceneId` and `targetPosition`. Has `setTarget` method.
+*   **`item.ts`**: Item definition module (`ItemType`, `Item` interface, `ITEM_CONFIG`, `getItemConfig`).
 *   **`droppedItem.ts`**: Defines the `DroppedItem` interface used by `EntityManager` and `SceneRenderer`.
 *   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. (`DoorExit` config restored but filtered from UI panel). Manages its own state, input handling, drawing. Loads its own assets.
 *   **`db.ts`**: IndexedDB persistence layer abstraction (`saveSceneState`, `loadSceneState`). Added `deleteSceneState` function.
@@ -110,8 +119,9 @@ The architecture is component-based, centered around a main `Game` class that ma
 
 *   **Initialization:** `main.ts` -> `Game` -> `Game.init` -> Load sounds -> `loadPlayerData` (gets `currentSceneId`) -> Create `Player` -> Restore Player state -> Create `CreativeSelector` -> Load Creative Assets -> Create initial `GameScene` instance (passing `Game`) -> `GameScene.load` (loads common assets, `SceneStateManager.loadState`, generates default if needed, `sceneRenderer.updateWorldDimensions`) -> Game loop starts.
 *   **Update Cycle:** `Game.update` -> `CreativeSelector.update` -> Check debug teleport / save keys -> `Game.currentScene.update` -> `GameScene` delegates to `GameplayController.update` OR `CreativeController.update` -> Controllers interact -> `Player.update` -> `SceneRenderer.updateCamera` -> Handle Inventory Clicks -> `InputHandler.resetFrameState`.
+*   **Scene Transition Flow:** `GameplayController.update` -> `SceneTransitionSystem.update` -> `SceneTransitionSystem` checks transition conditions -> If triggered, calls `Game.changeScene`.
 *   **Draw Cycle:** `Game.draw` -> `Game.currentScene.draw` -> `GameScene` gets info -> Delegates to `SceneRenderer.drawScene` -> `SceneRenderer` draws world -> `Game` draws screen-space UI (`InventoryUI`, `CreativeSelector`).
-*   **Scene Transition (`Game.changeScene(newId, context?)`):** Triggered by `GameplayController` (`checkDoorEntry` or `checkExitTrigger`). Saves outgoing scene -> Updates player data (`currentSceneId`) -> Creates new `GameScene` (passing `context`) -> Calls `newScene.load` -> Positions player (using `context.targetPosition` or defaults) -> Resets input.
+*   **Scene Transition (`Game.changeScene(newId, context?)`):** Triggered via `SceneTransitionSystem`. Saves outgoing scene -> Updates player data (`currentSceneId`) -> Creates new `GameScene` (passing `context`) -> Calls `newScene.load` -> Positions player (using `context.targetPosition` or defaults) -> Resets input.
 *   **State Location:**
     *   Global Game State: `Game` class (`creativeModeEnabled`, `currentSceneId`).
     *   Creative Selection State: `CreativeModeSelector`.
@@ -127,6 +137,7 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **Separation of Concerns:** `GameScene` responsibilities broken down into specialized managers/controllers.
 *   **Manager Pattern:** Used for `EntityManager`, `TerrainManager`, `SceneStateManager`.
 *   **Controller Pattern:** Used for `GameplayController`, `CreativeController`.
+*   **System Pattern:** Used for `SceneTransitionSystem` to encapsulate related functionality.
 *   **Scene Management:** `Game` manages `currentScene` instance and `currentSceneId`. Transitions handled by `Game.changeScene`, loading/saving delegated to `Scene`/`SceneStateManager`. Default scene generation for non-existent scene IDs (including interiors).
 *   **Decoupled Rendering:** Core `Renderer`, Scene-specific `SceneRenderer`. `SceneRenderer` dimensions updated dynamically.
 *   **Decoupled Audio:** `AudioPlayer` hides Web Audio API details.
@@ -136,7 +147,8 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **State Management:** Game state distributed across `Game`, managers, controllers, entities, UI components.
 *   **Input Handling:** Single-frame flags in `InputHandler`. UI consumes clicks, `resetMovement` added.
 *   **Collision Detection:** AABB checks in `GameplayController` (player vs objects, ignores `DoorExit`), `CreativeController` (placement), `EntityManager` (static helper). Terrain walkability checked via `TerrainManager`.
-*   **House Entry/Exit Triggers:** Separate checks in `GameplayController` comparing player center to calculated trigger zones (`checkDoorEntry` for `House`, `checkExitTrigger` for `DoorExit`). Context data (`originSceneId`, `exitTargetPosition`, `targetPosition`) passed via `changeScene`.
+*   **Scene Transition System:** Centralized in `SceneTransitionSystem`, handling edge transitions (outdoor grid navigation), interior entry (house doors), and interior exit (exit doors).
+*   **House Entry/Exit Triggers:** Handled by `SceneTransitionSystem`, comparing player center to calculated trigger zones. Context data (`originSceneId`, `exitTargetPosition`, `targetPosition`) passed via `changeScene`.
 *   **Simple State Machine:** Tree uses `STANDING`/`FALLING` states.
 *   **Delayed Actions:** Using `setTimeout` for tree destruction effects.
 *   **UI Interaction Handling:** UI components handle clicks, consume events.
@@ -144,10 +156,10 @@ The architecture is component-based, centered around a main `Game` class that ma
 
 ## 5. Additional Notes
 
-*   The refactoring significantly reduced the complexity of `GameScene`, making it primarily a coordinator.
-*   New classes (`EntityManager`, `TerrainManager`, `SceneStateManager`, `GameplayController`, `CreativeController`, `SceneRenderer`, `DoorExit`) now encapsulate specific responsibilities, improving modularity and maintainability.
+*   The refactoring significantly reduced the complexity of `GameScene` and `GameplayController`, making them primarily coordinators.
+*   New classes (`EntityManager`, `TerrainManager`, `SceneStateManager`, `GameplayController`, `CreativeController`, `SceneRenderer`, `DoorExit`, `SceneTransitionSystem`) now encapsulate specific responsibilities, improving modularity and maintainability.
 *   Clearer distinction between core rendering (`Renderer`) and scene-specific rendering (`SceneRenderer`).
 *   Persistence logic is isolated in `SceneStateManager` (for scene) and `Game` (for player).
 *   Input handling logic is separated based on game mode (`GameplayController`, `CreativeController`).
-*   Scene transitions handle saving/loading and context passing.
+*   Scene transitions are centralized in the dedicated `SceneTransitionSystem`.
 *   Dynamic world/grid dimensions handled by `TerrainManager` and `SceneRenderer`. 

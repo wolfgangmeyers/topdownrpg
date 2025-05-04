@@ -150,9 +150,38 @@ export class GameScene extends Scene {
         this.entityManager = new EntityManager(assetLoader, audioPlayer);
         this.terrainManager = new TerrainManager(this.worldWidth, this.worldHeight, this.tileSize);
         this.stateManager = new SceneStateManager(this.entityManager, this.terrainManager, assetLoader, this);
-        this.gameplayController = new GameplayController(game, inputHandler, player, this.entityManager, this.terrainManager, audioPlayer, this.worldWidth, this.worldHeight, this.tileSize);
-        this.creativeController = new CreativeController(inputHandler, this.entityManager, this.terrainManager, assetLoader, this.tileSize);
-        this.sceneRenderer = new SceneRenderer(renderer, assetLoader, this.entityManager, this.terrainManager, player, this.worldWidth, this.worldHeight, this.tileSize);
+        
+        // Create the controllers
+        this.gameplayController = new GameplayController(
+            game, 
+            inputHandler, 
+            player, 
+            this.entityManager, 
+            this.terrainManager, 
+            audioPlayer, 
+            this.worldWidth, 
+            this.worldHeight, 
+            this.tileSize
+        );
+        
+        this.creativeController = new CreativeController(
+            inputHandler, 
+            this.entityManager, 
+            this.terrainManager, 
+            assetLoader, 
+            this.tileSize
+        );
+        
+        this.sceneRenderer = new SceneRenderer(
+            renderer, 
+            assetLoader, 
+            this.entityManager, 
+            this.terrainManager, 
+            player, 
+            this.worldWidth, 
+            this.worldHeight, 
+            this.tileSize
+        );
     }
 
     // --- Get World Dimensions --- 

@@ -153,14 +153,60 @@ This file captures key decisions, techniques, and context from the development s
 *   **Debug Teleport (`Game`, `InputHandler`):**
     *   Pressing 'T' now saves the current scene via `currentScene.save()` before calling `changeScene('defaultForest')`.
 
+## Feature: Scene Transition System Refactoring
+
+*   **Goal:** Refactor scene transition logic into a dedicated module to improve maintainability and separation of concerns.
+*   **New File:** Created `sceneTransitionSystem.ts` to centralize all scene transition-related functionality.
+*   **Core Components:**
+    *   **`SceneTransitionSystem` Class:** Encapsulates all scene transition logic.
+    *   **`Direction` Enum:** Moved from `gameplayController.ts`, represents cardinal directions (NORTH, EAST, SOUTH, WEST).
+    *   **Three Key Methods:**
+        1. `checkSceneEdgeTransition()`: Handles transitions between outdoor grid scenes.
+        2. `checkDoorEntry()`: Manages entering houses into interior scenes.
+        3. `checkExitTrigger()`: Handles exiting from interior scenes back to the exterior.
+    *   **Main Entry Point:** Public `update()` method that selectively calls the appropriate transition method based on the current scene type.
+*   **Integration Changes:**
+    *   `GameplayController` now creates and holds a `SceneTransitionSystem` instance.
+    *   Removed transition-related methods from `GameplayController` including `checkDoorEntry()`, `checkExitTrigger()` and `checkSceneEdgeTransition()`.
+    *   The controller now calls `transitionSystem.update()` instead of individual transition methods.
+    *   Collision detection logic for exit doors moved to the transition system.
+*   **Key Benefits:**
+    *   **Separation of Concerns:** GameplayController now focuses purely on gameplay mechanics rather than scene transitions.
+    *   **Centralized Logic:** All transition logic is now in one file, making it easier to understand and maintain.
+    *   **Improved Cohesion:** The `SceneTransitionSystem` has a clear, focused responsibility.
+    *   **Easier to Extend:** New transition types can be added without modifying the gameplay controller.
+*   **Documentation:**
+    *   Added `sceneTransition.md` file with detailed explanation of the system.
+    *   Updated architecture documentation to reflect the changes.
+
+## Feature: Scene Edge Transition and Grid System
+
+*   **Goal:** Implement a grid-based scene system for the exterior world, where each scene connects to adjacent scenes.
+*   **Scene Naming Convention:**
+    *   Changed from the original random UUID-based naming (`world-[uuid]`) to a grid coordinate system: `world-x-y`
+    *   Default scene renamed from "defaultForest" to "world-0-0"
+    *   Interior scene naming (`interior-[houseId]`) remains unchanged
+*   **Edge Detection:**
+    *   Uses a small threshold (2 pixels) to detect when the player reaches a scene edge
+    *   When detected, calculates the appropriate adjacent scene ID based on the current coordinates and direction
+    *   Player position is adjusted to appear on the opposite side of the destination scene
+*   **Bidirectional Linking:**
+    *   Each scene stores references to its adjacent scenes (northSceneId, eastSceneId, etc.)
+    *   When a new scene is created, a link back to the originating scene is also established
+    *   These links are saved to the database to ensure consistency between sessions
+*   **Persistence:**
+    *   Adjacent scene references are saved as part of the scene state
+*   **Debug Features:**
+    *   Added debug key commands (1-4) to force the player beyond scene boundaries for testing
+*   **Context-aware Scene Creation:**
+    *   New scenes are created with contextual information about which direction they were entered from
+    *   Grid coordinates are calculated based on the direction of movement
+*   **Benefits:** 
+    *   The game now supports exploration of a theoretically infinite grid-based world
+    *   Proper adjacency relationships ensure that players can navigate back and forth between scenes
+
 ## Known Issues / Next Steps (Implied)
 
-*   Only one scene ('defaultForest') implemented.
-*   No transitions between scenes.
-*   No NPCs or advanced interaction system.
-*   Basic collision resolution.
-*   Manual saving ('F5' assumed, though Save key exists); auto-save TBD.
-*   No visual feedback for falling trees (just disappear after delay).
 *   Limited item types.
 *   Basic swing animation.
 *   No sound for item pickup.
