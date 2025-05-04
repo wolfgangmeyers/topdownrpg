@@ -36,6 +36,11 @@ interface SavedSceneState {
     objects: SavedObjectState[];
     droppedItems?: Array<{itemId: string, x: number, y: number, quantity: number}>;
     terrainGrid?: TerrainType[][]; // Add terrain grid to save state
+    // Adjacent scene references
+    northSceneId?: string | null;
+    eastSceneId?: string | null;
+    southSceneId?: string | null;
+    westSceneId?: string | null;
     // Could add other scene-specific data here later (e.g., background type)
 }
 
@@ -101,6 +106,13 @@ export class GameScene extends Scene {
     public readonly tileSize: number = 64; // Define tile size
     private terrainGrid: TerrainType[][] = []; // 2D array for terrain types
 
+    // --- Adjacent Scene References ---
+    public northSceneId: string | null = null;
+    public eastSceneId: string | null = null;
+    public southSceneId: string | null = null;
+    public westSceneId: string | null = null;
+    // --- End Adjacent Scene References ---
+
     // --- Interaction Properties --- 
     private closestPickupItem: DroppedItem | null = null;
     private readonly pickupRange: number = 50; // Max distance to show pickup prompt
@@ -137,7 +149,7 @@ export class GameScene extends Scene {
         // Instantiate Managers/Controllers
         this.entityManager = new EntityManager(assetLoader, audioPlayer);
         this.terrainManager = new TerrainManager(this.worldWidth, this.worldHeight, this.tileSize);
-        this.stateManager = new SceneStateManager(this.entityManager, this.terrainManager, assetLoader);
+        this.stateManager = new SceneStateManager(this.entityManager, this.terrainManager, assetLoader, this);
         this.gameplayController = new GameplayController(game, inputHandler, player, this.entityManager, this.terrainManager, audioPlayer, this.worldWidth, this.worldHeight, this.tileSize);
         this.creativeController = new CreativeController(inputHandler, this.entityManager, this.terrainManager, assetLoader, this.tileSize);
         this.sceneRenderer = new SceneRenderer(renderer, assetLoader, this.entityManager, this.terrainManager, player, this.worldWidth, this.worldHeight, this.tileSize);
@@ -201,9 +213,9 @@ export class GameScene extends Scene {
         this.entityManager.clearAll();
         
         if (this.sceneId.startsWith('interior-')) {
+            console.log(`Generating default interior layout for ${this.sceneId}...`);
             const interiorRows = 10;
             const interiorCols = 10;
-            console.log(`GameScene [${this.sceneId}]: Generating ${interiorCols}x${interiorRows} interior layout.`);
             
             this.terrainManager.resizeGrid(interiorRows, interiorCols);
             this.terrainManager.fillGridWith(TerrainType.WOOD_FLOOR);
@@ -212,45 +224,62 @@ export class GameScene extends Scene {
             const exitY = (interiorRows - 1) * this.tileSize + this.tileSize / 2; 
             
             const doorConfig = PLACEABLE_OBJECT_CONFIG['DoorExit'];
-            if (doorConfig) {
-                const doorImg = this.assetLoader.getImage(doorConfig.assetPath);
-                if (doorImg) {
-                    const doorWidth = doorImg.naturalWidth;
-                    const doorHeight = doorImg.naturalHeight;
-                    const exitDoor = new DoorExit(exitX, exitY, doorWidth, doorHeight);
-                    
-                    // Set the exit target using contextData passed during scene change
-                    if (this.contextData && this.contextData.originSceneId && this.contextData.exitTargetPosition) {
-                        exitDoor.setTarget(this.contextData.originSceneId, this.contextData.exitTargetPosition);
-                        console.log(`  Set DoorExit target: Scene=${exitDoor.targetSceneId}, Pos=(${exitDoor.targetPosition?.x.toFixed(0)}, ${exitDoor.targetPosition?.y.toFixed(0)})`);
-                    } else {
-                        console.warn(`  Could not set DoorExit target: Missing contextData (originSceneId or exitTargetPosition).`);
-                        // Fallback? Or leave target as null? For now, leave null.
-                    }
-
-                    this.entityManager.addStaticObject(exitDoor);
-                    console.log(`Placed DoorExit in interior at (${exitX.toFixed(0)}, ${exitY.toFixed(0)})`);
-                } else {
-                    console.error("Could not place DoorExit: Asset not loaded.");
-                }
-            } else {
-                 console.error("Could not place DoorExit: Config not found.");
-            }
+            console.log(`DoorExit config:`, doorConfig);
             
-        } else if (this.sceneId === 'roadRoom') {
-            console.log(`GameScene [${this.sceneId}]: Generating road room layout.`);
-            // Use default grid size (implicitly set by constructor/resize)
-            this.terrainManager.fillGridWith(TerrainType.ROAD);
-            // No objects
+            if (doorConfig) {
+                // Ensure the asset is loaded
+                this.assetLoader.loadImage(doorConfig.assetPath)
+                    .then(doorImg => {
+                        console.log(`DoorExit asset loaded: ${doorConfig.assetPath}, dimensions: ${doorImg.naturalWidth}x${doorImg.naturalHeight}`);
+                        
+                        const doorWidth = doorImg.naturalWidth;
+                        const doorHeight = doorImg.naturalHeight;
+                        const exitDoor = new DoorExit(exitX, exitY, doorWidth, doorHeight);
+                        
+                        // Set the exit target using contextData passed during scene change
+                        if (this.contextData && this.contextData.originSceneId && this.contextData.exitTargetPosition) {
+                            exitDoor.setTarget(this.contextData.originSceneId, this.contextData.exitTargetPosition);
+                            console.log(`Set DoorExit target to scene: ${this.contextData.originSceneId}, position: (${this.contextData.exitTargetPosition.x.toFixed(0)}, ${this.contextData.exitTargetPosition.y.toFixed(0)})`);
+                        } else {
+                            console.warn(`Missing contextData for DoorExit in ${this.sceneId}:`, this.contextData);
+                        }
+
+                        this.entityManager.addStaticObject(exitDoor);
+                        console.log(`Added DoorExit to entityManager at (${exitX.toFixed(0)}, ${exitY.toFixed(0)})`);
+                    })
+                    .catch(err => {
+                        console.error(`Failed to load DoorExit asset: ${doorConfig.assetPath}`, err);
+                    });
+            } else {
+                console.error(`Missing DoorExit configuration in PLACEABLE_OBJECT_CONFIG`);
+            }
+        } else if (this.sceneId.startsWith('world-')) {
+            // World grid scene - extract coordinates if present
+            const parts = this.sceneId.split('-');
+            // Default to 15 trees, but could vary based on coordinates for different biomes later
+            const numTrees = 15;
+            
+            // Ensure default grid size is used
+            this.terrainManager.resizeGrid(Math.ceil(this.worldHeight / this.tileSize), Math.ceil(this.worldWidth / this.tileSize));
+            this.entityManager.populateTrees(numTrees, this.worldWidth, this.worldHeight);
+            this.terrainManager.initializeTerrainGrid();
+            
+            // Set up bidirectional link if this is a new scene
+            if (this.contextData && this.contextData.isNewScene && 
+                this.contextData.linkedDirection && this.contextData.linkedSceneId) {
+                
+                const direction = this.contextData.linkedDirection;
+                const linkedSceneId = this.contextData.linkedSceneId;
+                
+                // Set the proper directional link
+                this.setAdjacentSceneId(direction, linkedSceneId);
+            }
         } else {
-            // Default layout (e.g., 'defaultForest')
-            console.log(`GameScene [${this.sceneId}]: Generating default forest layout.`);
-            // Ensure default grid size is used if load failed
+            // Handle any other scene types (legacy support)
             this.terrainManager.resizeGrid(Math.ceil(this.worldHeight / this.tileSize), Math.ceil(this.worldWidth / this.tileSize));
             this.entityManager.populateTrees(15, this.worldWidth, this.worldHeight);
             this.terrainManager.initializeTerrainGrid(); 
         }
-        console.log(`GameScene [${this.sceneId}]: Default layout generated.`);
     }
     // --- End Default Layout ---
 
@@ -335,6 +364,28 @@ export class GameScene extends Scene {
          this.entityManager.spawnDroppedItem(itemId, dropX, dropY, quantity);
      }
     // --- End Public Method ---
+
+    // --- Adjacent Scene Methods ---
+    public getAdjacentSceneId(direction: 'north' | 'east' | 'south' | 'west'): string | null {
+        let result: string | null = null;
+        switch (direction) {
+            case 'north': result = this.northSceneId; break;
+            case 'east': result = this.eastSceneId; break;
+            case 'south': result = this.southSceneId; break;
+            case 'west': result = this.westSceneId; break;
+        }
+        return result;
+    }
+
+    public setAdjacentSceneId(direction: 'north' | 'east' | 'south' | 'west', sceneId: string | null): void {
+        switch (direction) {
+            case 'north': this.northSceneId = sceneId; break;
+            case 'east': this.eastSceneId = sceneId; break;
+            case 'south': this.southSceneId = sceneId; break;
+            case 'west': this.westSceneId = sceneId; break;
+        }
+    }
+    // --- End Adjacent Scene Methods ---
 
     // --- REMOVED METHODS (moved to other classes) ---
     // All private methods related to drawing, input handling, state management, etc., are now removed.

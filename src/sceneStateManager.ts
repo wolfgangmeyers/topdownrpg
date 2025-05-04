@@ -32,6 +32,11 @@ interface SavedSceneState {
     objects: SavedObjectState[];
     droppedItems: SavedDroppedItemState[];
     terrainGrid: TerrainType[][];
+    // Add adjacent scene references
+    northSceneId?: string | null;
+    eastSceneId?: string | null;
+    southSceneId?: string | null;
+    westSceneId?: string | null;
 }
 // --- End Interfaces ---
 
@@ -39,92 +44,117 @@ export class SceneStateManager {
     constructor(
         private entityManager: EntityManager,
         private terrainManager: TerrainManager,
-        private assetLoader: AssetLoader // Needed to load assets for loaded objects/items
+        private assetLoader: AssetLoader, // Needed to load assets for loaded objects/items
+        private gameScene: any // Reference to the GameScene for accessing adjacent scene IDs
     ) {}
 
     async saveState(sceneId: string): Promise<void> {
-        console.log(`Attempting to save scene [${sceneId}]...`);
         try {
-            // Serialize Static Objects
-            const savedObjects: SavedObjectState[] = this.entityManager.staticObjects.map(obj => {
-                let type: PlaceableObjectType;
-                let state: Partial<SavedObjectState> = { x: obj.x, y: obj.y };
-
+            // Get all static objects (like trees, houses)
+            const objects = this.entityManager.staticObjects.map(obj => {
+                // Convert to serializable structure
+                const savedObject: SavedObjectState = {
+                    type: obj.constructor.name as PlaceableObjectType,
+                    x: obj.x,
+                    y: obj.y
+                };
+                // Conditionally add health for Tree objects
                 if (obj instanceof Tree) {
-                    type = 'Tree';
-                    state.currentHealth = obj.currentHealth; // Safe: obj is Tree here
-                } else if (obj instanceof House) {
-                    type = 'House';
-                    state.id = obj.id; // Save the House ID
-                } else if (obj instanceof DoorExit) {
-                    type = 'DoorExit';
-                    // Save target info if it exists
-                    if (obj.targetSceneId) state.targetSceneId = obj.targetSceneId;
-                    if (obj.targetPosition) state.targetPosition = obj.targetPosition;
-                } else {
-                    console.warn('Unknown object type during save:', obj);
-                    return null; // Skip
+                    const tree = obj as Tree;
+                    // Only save health if the tree is damaged but not felled
+                    if (tree.state === 'STANDING' && tree.currentHealth < tree.maxHealth) {
+                        savedObject.currentHealth = tree.currentHealth;
+                    }
                 }
-                state.type = type;
-                return state as SavedObjectState;
-            }).filter(obj => obj !== null) as SavedObjectState[];
+                // Save House ID
+                else if (obj instanceof House) {
+                    savedObject.id = (obj as House).id;
+                }
+                // Save DoorExit target information
+                else if (obj instanceof DoorExit) {
+                    const doorExit = obj as DoorExit;
+                    if (doorExit.targetSceneId && doorExit.targetPosition) {
+                        savedObject.targetSceneId = doorExit.targetSceneId;
+                        savedObject.targetPosition = doorExit.targetPosition;
+                    }
+                }
+                return savedObject;
+            });
 
-            // Serialize Dropped Items
-            const savedDroppedItems: SavedDroppedItemState[] = this.entityManager.droppedItems.map(drop => ({
-                itemId: drop.itemConfig.id,
-                x: drop.x,
-                y: drop.y,
-                quantity: drop.quantity
-            }));
+            // Get terrain grid
+            const terrainGrid = this.terrainManager.getGrid().map(row => [...row]);
 
-            // Get Terrain Grid
-            const terrainGrid = this.terrainManager.getGrid();
+            // Get references to adjacent scenes
+            const northSceneId = this.gameScene.northSceneId;
+            const eastSceneId = this.gameScene.eastSceneId;
+            const southSceneId = this.gameScene.southSceneId;
+            const westSceneId = this.gameScene.westSceneId;
 
-            const sceneState: SavedSceneState = {
-                objects: savedObjects,
-                droppedItems: savedDroppedItems,
-                terrainGrid: terrainGrid.map(row => [...row]) 
+            // Get all DroppedItems
+            const droppedItems = this.entityManager.droppedItems.map(item => {
+                return {
+                    itemId: item.itemConfig.id,
+                    x: item.x,
+                    y: item.y,
+                    quantity: item.quantity
+                };
+            });
+
+            // Create the full saved state object
+            const savedState: SavedSceneState = {
+                objects: objects,
+                terrainGrid: terrainGrid,
+                droppedItems: droppedItems,
+                northSceneId,
+                eastSceneId,
+                southSceneId,
+                westSceneId
             };
 
-            await dbSave(sceneId, sceneState);
-             // Success log is in dbSave
-
+            // Save to database
+            await dbSave(sceneId, savedState);
         } catch (error) {
-            console.error(`Failed to save scene state for [${sceneId}]:`, error);
+            console.error(`Error saving state for scene [${sceneId}]:`, error);
+            throw error; // Re-throw to allow caller to handle
         }
     }
 
     // Returns true if load was successful, false otherwise
     async loadState(sceneId: string): Promise<boolean> {
-        console.log(`Attempting to load scene [${sceneId}] from DB...`);
         try {
-            const loadedState = await dbLoad(sceneId) as SavedSceneState | null;
-
-            if (!loadedState) {
-                console.log(`No saved state found for scene [${sceneId}].`);
-                return false; // Indicate defaults should be used
-            }
-
-            // Basic validation
-            if (!loadedState || !Array.isArray(loadedState.objects) || !Array.isArray(loadedState.droppedItems) || !Array.isArray(loadedState.terrainGrid)) {
-                console.error(`Invalid saved scene state format for [${sceneId}].`);
-                // TODO: Consider deleting invalid data?
+            // Attempt to load from database
+            const savedState = await dbLoad(sceneId) as SavedSceneState | null;
+            
+            if (!savedState) {
                 return false;
             }
-
-            // --- Clear existing state before loading ---
-            this.entityManager.clearAll(); // Use clearAll method
-            // Terrain grid handled by TerrainManager.setGrid below
-
+            
+            // Clear current entities
+            this.entityManager.clearAll();
+            
+            // Restore adjacent scene references
+            if (savedState.northSceneId !== undefined) {
+                this.gameScene.northSceneId = savedState.northSceneId;
+            }
+            if (savedState.eastSceneId !== undefined) {
+                this.gameScene.eastSceneId = savedState.eastSceneId;
+            }
+            if (savedState.southSceneId !== undefined) {
+                this.gameScene.southSceneId = savedState.southSceneId;
+            }
+            if (savedState.westSceneId !== undefined) {
+                this.gameScene.westSceneId = savedState.westSceneId;
+            }
+            
             // --- Pre-load assets ---
             const requiredAssets = new Set<string>();
-            loadedState.objects.forEach(objState => {
+            savedState.objects.forEach(objState => {
                 const objectTypeKey = objState.type as PlaceableObjectType;
                 const config = PLACEABLE_OBJECT_CONFIG[objectTypeKey];
                 if (config) requiredAssets.add(config.assetPath);
                 else console.warn(`Config not found for saved object type: ${objState.type}`);
             });
-            loadedState.droppedItems.forEach(itemState => {
+            savedState.droppedItems.forEach(itemState => {
                 const config = getItemConfig(itemState.itemId);
                 if (config) requiredAssets.add(config.assetPath);
             });
@@ -134,8 +164,8 @@ export class SceneStateManager {
             console.log('Required assets for saved state loaded.');
 
             // --- Load Static Objects ---
-            console.log(`Loading ${loadedState.objects.length} objects...`);
-            for (const savedObj of loadedState.objects) {
+            console.log(`Loading ${savedState.objects.length} objects...`);
+            for (const savedObj of savedState.objects) {
                  const objectTypeKey = savedObj.type as PlaceableObjectType;
                  const config = PLACEABLE_OBJECT_CONFIG[objectTypeKey];
                 if (!config) {
@@ -178,8 +208,8 @@ export class SceneStateManager {
             }
 
             // --- Load Dropped Items ---
-            console.log(`Loading ${loadedState.droppedItems.length} dropped items...`);
-             for (const itemData of loadedState.droppedItems) {
+            console.log(`Loading ${savedState.droppedItems.length} dropped items...`);
+             for (const itemData of savedState.droppedItems) {
                  const itemConfig = getItemConfig(itemData.itemId);
                  if (itemConfig) {
                      const loadedDrop: DroppedItem = { // Use direct import now
@@ -195,15 +225,14 @@ export class SceneStateManager {
              }
 
             // --- Load Terrain Grid ---
-            console.log(`Loading terrain grid (${loadedState.terrainGrid.length}x${loadedState.terrainGrid[0]?.length ?? 0}) from saved state...`);
-            this.terrainManager.setGrid(loadedState.terrainGrid); // Let TerrainManager handle validation
+            console.log(`Loading terrain grid (${savedState.terrainGrid.length}x${savedState.terrainGrid[0]?.length ?? 0}) from saved state...`);
+            this.terrainManager.setGrid(savedState.terrainGrid); // Let TerrainManager handle validation
 
-            console.log(`Scene [${sceneId}] loaded successfully from state.`);
-            return true; // Load successful
-
+            console.log(`SceneStateManager: Successfully loaded state for scene [${sceneId}]`);
+            return true;
         } catch (error) {
-            console.error(`Failed to load scene state for [${sceneId}]:`, error);
-            return false; // Load failed
+            console.error(`SceneStateManager: Error loading state for scene [${sceneId}]:`, error);
+            return false;
         }
     }
 } 

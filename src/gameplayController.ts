@@ -18,6 +18,14 @@ interface BoundingBox {
     height: number;
 }
 
+// --- Direction Enum ---
+enum Direction {
+    NORTH = 'north',
+    EAST = 'east',
+    SOUTH = 'south',
+    WEST = 'west'
+}
+// --- End Direction Enum ---
 
 export class GameplayController {
     private closestPickupItem: DroppedItem | null = null;
@@ -38,13 +46,33 @@ export class GameplayController {
     ) {}
 
     update(deltaTime: number): void {
+        // DEBUG: Force player beyond boundary with number keys
+        if (this.inputHandler.isKeyPressed('1')) {
+            // Force player beyond left edge
+            this.player.x = -60; // Use a much larger negative value
+            console.log(`DEBUG KEY 1: Forcing player to X=${this.player.x}`); 
+        } else if (this.inputHandler.isKeyPressed('2')) {
+            // Force player beyond right edge
+            const width = this.game.getCurrentScene().getWorldDimensions().width;
+            this.player.x = width + 60; // Use a much larger positive value
+            console.log(`DEBUG KEY 2: Forcing player to X=${this.player.x}`);
+        } else if (this.inputHandler.isKeyPressed('3')) {
+            // Force player beyond top edge
+            this.player.y = -60; // Use a much larger negative value
+            console.log(`DEBUG KEY 3: Forcing player to Y=${this.player.y}`);
+        } else if (this.inputHandler.isKeyPressed('4')) {
+            // Force player beyond bottom edge
+            const height = this.game.getCurrentScene().getWorldDimensions().height;
+            this.player.y = height + 60; // Use a much larger positive value
+            console.log(`DEBUG KEY 4: Forcing player to Y=${this.player.y}`);
+        }
+        
         this.handleMovement(deltaTime);
+        this.checkSceneEdgeTransition();
         this.handleToolUsage();
         this.handleItemPickup();
         this.handleItemDrop();
-        this.checkExitTrigger(); // Check for exit trigger AFTER movement/actions
-
-        // Update closest item for UI prompt (could be moved to a separate UI controller later)
+        this.checkExitTrigger();
         this.updateClosestPickupItem();
     }
 
@@ -68,10 +96,21 @@ export class GameplayController {
         const proposedX = oldX + dx * currentSpeed * deltaTime * 60; // Use scaled delta time
         const proposedY = oldY + dy * currentSpeed * deltaTime * 60;
 
+        // Get world dimensions for bounds checking
+        const dimensions = this.game.getCurrentScene().getWorldDimensions();
+        const worldWidth = dimensions.width;
+        const worldHeight = dimensions.height;
+
         // --- Terrain Collision Check ---
         const targetGridX = Math.floor(proposedX / this.tileSize);
         const targetGridY = Math.floor(proposedY / this.tileSize);
-        const canMoveToTile = this.terrainManager.isWalkable(targetGridX, targetGridY);
+        let canMoveToTile = true; // Default to true instead of checking terrain
+
+        // Only check terrain within bounds - allow moving beyond bounds
+        if (targetGridX >= 0 && targetGridX < dimensions.width / this.tileSize &&
+            targetGridY >= 0 && targetGridY < dimensions.height / this.tileSize) {
+            canMoveToTile = this.terrainManager.isWalkable(targetGridX, targetGridY);
+        }
 
         let finalX = oldX;
         let finalY = oldY;
@@ -79,15 +118,22 @@ export class GameplayController {
         if (canMoveToTile) {
             finalX = proposedX;
             finalY = proposedY;
-             // Apply boundaries *after* terrain check, *before* object check
-             const clampedPos = this.clampToBoundaries({ x: finalX, y: finalY, width: this.player.width, height: this.player.height });
-             finalX = clampedPos.x;
-             finalY = clampedPos.y;
+            
+            // Check if we're in an interior scene
+            const isInteriorScene = this.game.getCurrentSceneId().startsWith('interior-');
+            
+            // Only apply boundary clamping for interior scenes
+            if (isInteriorScene) {
+                // Apply boundaries for interior scenes only
+                const clampedPos = this.clampToBoundaries({ x: finalX, y: finalY, width: this.player.width, height: this.player.height });
+                finalX = clampedPos.x;
+                finalY = clampedPos.y;
+            }
+            // For outdoor scenes, allow moving beyond boundaries for scene transitions
         } else {
             // Prevent movement into non-walkable terrain
-             finalX = oldX;
-             finalY = oldY;
-            // TODO: Implement sliding logic against walls/terrain later if desired
+            finalX = oldX;
+            finalY = oldY;
         }
 
 
@@ -100,42 +146,42 @@ export class GameplayController {
             const playerBounds: BoundingBox = { x: finalX, y: finalY, width: this.player.width, height: this.player.height };
             let collisionDetected = false;
             for (const obj of this.entityManager.staticObjects) {
-                 // Ignore collision with falling trees
-                 if (obj instanceof Tree && obj.state === 'FALLING') {
-                     continue;
-                 }
-                 
-                 // Ignore collision with DoorExit objects for movement blocking
-                 if (obj instanceof DoorExit) {
-                     continue;
-                 }
-                 
-                 // Define the object's bounds for collision check
-                 let objBounds: BoundingBox;
-                 if (obj instanceof House) {
-                     // For houses, use a slightly shorter bounding box to allow overlap with the door area
-                     const collisionHeight = obj.height - 10; // Exclude bottom 10 pixels (door area)
-                     objBounds = {
-                         x: obj.x,
-                         y: obj.y - 5, // Adjust center slightly upwards to match reduced height
-                         width: obj.width,
-                         height: collisionHeight
-                     };
-                 } else {
-                     // For other objects (Trees), use the full bounding box
-                     objBounds = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
-                 }
+                // Ignore collision with falling trees
+                if (obj instanceof Tree && obj.state === 'FALLING') {
+                    continue;
+                }
+                
+                // Ignore collision with DoorExit objects for movement blocking
+                if (obj instanceof DoorExit) {
+                    continue;
+                }
+                
+                // Define the object's bounds for collision check
+                let objBounds: BoundingBox;
+                if (obj instanceof House) {
+                    // For houses, use a slightly shorter bounding box to allow overlap with the door area
+                    const collisionHeight = obj.height - 10; // Exclude bottom 10 pixels (door area)
+                    objBounds = {
+                        x: obj.x,
+                        y: obj.y - 5, // Adjust center slightly upwards to match reduced height
+                        width: obj.width,
+                        height: collisionHeight
+                    };
+                } else {
+                    // For other objects (Trees), use the full bounding box
+                    objBounds = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+                }
 
-                 if (EntityManager.checkCollision(playerBounds, objBounds)) { // Use static checkCollision
-                     collisionDetected = true;
-                     break;
-                 }
+                if (EntityManager.checkCollision(playerBounds, objBounds)) { // Use static checkCollision
+                    collisionDetected = true;
+                    break;
+                }
             }
 
             // If collision with an object, revert to the original position
             if (collisionDetected) {
-                 finalX = oldX;
-                 finalY = oldY;
+                finalX = oldX;
+                finalY = oldY;
             }
         }
 
@@ -149,9 +195,8 @@ export class GameplayController {
         this.player.x = finalX;
         this.player.y = finalY;
 
-        // --- Door Entry Check (New) ---
-        // Check *after* final position is set, independent of collision blocking
-        this.checkDoorEntry(); 
+        // --- House and exit checks ---
+        this.checkDoorEntry(); // Check for house entry
     }
 
     // --- Door Entry Check Method (New) ---
@@ -362,6 +407,21 @@ export class GameplayController {
 
     // --- Exit Trigger Check Method --- 
     private checkExitTrigger(): void {
+        // Debug log to check if the method is being called
+        console.log(`Checking for exit triggers: ${this.entityManager.staticObjects.length} static objects`); 
+        
+        // Check specifically for DoorExit objects
+        const doorExits = this.entityManager.staticObjects.filter(obj => obj instanceof DoorExit);
+        console.log(`Found ${doorExits.length} DoorExit objects`);
+        
+        if (doorExits.length > 0) {
+            // Log properties of each exit door
+            doorExits.forEach((door, i) => {
+                const exit = door as DoorExit;
+                console.log(`DoorExit #${i}: position (${exit.x.toFixed(0)}, ${exit.y.toFixed(0)}), targetSceneId: ${exit.targetSceneId}, has target position: ${exit.targetPosition !== null}`);
+            });
+        }
+        
         for (const obj of this.entityManager.staticObjects) {
             // Check if the object is a DoorExit
             if (obj instanceof DoorExit) {
@@ -388,4 +448,108 @@ export class GameplayController {
     }
     // --- End Exit Trigger Check ---
 
+    private checkSceneEdgeTransition(): void {
+        // Skip for interior scenes
+        const currentSceneId = this.game.getCurrentSceneId();
+        if (currentSceneId.startsWith('interior-')) {
+            return;
+        }
+
+        // Get current scene from game
+        const currentScene = this.game.getCurrentScene();
+        if (!currentScene) return;
+
+        // Get world dimensions
+        const dimensions = currentScene.getWorldDimensions();
+        const worldWidth = dimensions.width;
+        const worldHeight = dimensions.height;
+
+        // Check if player is near or beyond scene boundaries
+        let direction: Direction | null = null;
+        let targetPosition = { x: this.player.x, y: this.player.y };
+
+        // Determine exit direction and calculate entry position
+        const halfWidth = this.player.width / 2;
+        const halfHeight = this.player.height / 2;
+        
+        // Use a small threshold for near-boundary detection
+        const threshold = 2;
+
+        // Check actual position with a small threshold
+        if (this.player.x <= threshold) {
+            direction = Direction.WEST;
+            targetPosition.x = worldWidth - halfWidth; // Place at right edge
+        } else if (this.player.x >= worldWidth - threshold) {
+            direction = Direction.EAST;
+            targetPosition.x = halfWidth; // Place at left edge
+        } else if (this.player.y <= threshold) {
+            direction = Direction.NORTH;
+            targetPosition.y = worldHeight - halfHeight; // Place at bottom edge
+        } else if (this.player.y >= worldHeight - threshold) {
+            direction = Direction.SOUTH;
+            targetPosition.y = halfHeight; // Place at top edge
+        }
+
+        // If not at an edge, return
+        if (!direction) return;
+
+        // Parse current scene coordinates
+        const [scenePrefix, sceneXStr, sceneYStr] = currentSceneId.split('-');
+        let sceneX = parseInt(sceneXStr) || 0;
+        let sceneY = parseInt(sceneYStr) || 0;
+        
+        // Calculate new scene coordinates based on direction
+        switch(direction) {
+            case Direction.NORTH: sceneY--; break;
+            case Direction.EAST: sceneX++; break;
+            case Direction.SOUTH: sceneY++; break;
+            case Direction.WEST: sceneX--; break;
+        }
+        
+        // Create the new scene ID using grid coordinates
+        const newSceneId = `world-${sceneX}-${sceneY}`;
+
+        // Get adjacent scene ID 
+        let adjacentSceneId = currentScene.getAdjacentSceneId(direction.toLowerCase() as 'north' | 'east' | 'south' | 'west');
+
+        // If no adjacent scene exists yet, create a new one with the grid-based ID
+        if (!adjacentSceneId) {
+            adjacentSceneId = newSceneId;
+            
+            // Update bidirectional links
+            const oppositeDirection = this.getOppositeDirection(direction);
+            
+            // Update current scene with link to new scene
+            currentScene.setAdjacentSceneId(direction.toLowerCase() as 'north' | 'east' | 'south' | 'west', adjacentSceneId);
+            
+            // Save current scene state to ensure the link is persisted
+            currentScene.save();
+
+            // Create context data with reverse link
+            const contextData = {
+                isNewScene: true,
+                linkedDirection: oppositeDirection,
+                linkedSceneId: currentSceneId,
+                targetPosition: targetPosition
+            };
+
+            // Transition to the new scene
+            this.game.changeScene(adjacentSceneId, contextData);
+        } else {
+            // Transition to existing adjacent scene
+            this.game.changeScene(adjacentSceneId, { targetPosition });
+        }
+    }
+
+    // Helper to get opposite direction
+    private getOppositeDirection(direction: Direction): 'north' | 'east' | 'south' | 'west' {
+        let result: 'north' | 'east' | 'south' | 'west';
+        switch (direction) {
+            case Direction.NORTH: result = 'south'; break;
+            case Direction.EAST: result = 'west'; break;
+            case Direction.SOUTH: result = 'north'; break;
+            case Direction.WEST: result = 'east'; break;
+        }
+        return result;
+    }
 } 

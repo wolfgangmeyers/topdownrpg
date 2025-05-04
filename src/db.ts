@@ -6,6 +6,11 @@ const SCENE_STORE_NAME = 'scenes';
 // (Duplicate or import from scene.ts - let's keep it simple for now)
 interface SavedSceneState {
     objects: { type: string; x: number; y: number }[]; // Simplified for DB structure
+    // Adjacent scene references
+    northSceneId?: string | null;
+    eastSceneId?: string | null;
+    southSceneId?: string | null;
+    westSceneId?: string | null;
     // Add other scene-specific persistent data here later
 }
 

@@ -33,7 +33,7 @@ export class Game {
     private assetLoader: AssetLoader;
     private player: Player | null = null; // Keep player reference if needed globally
     private currentScene: Scene | null = null;
-    private currentSceneId: string = 'defaultForest'; // Track current scene ID, default
+    private currentSceneId: string = 'world-0-0'; // Track current scene ID, default is now world-0-0 instead of defaultForest
     private audioPlayer: AudioPlayer; // Add AudioPlayer instance
     private creativeModeSelector: CreativeModeSelector; // Add the selector instance
     private isLoading: boolean = true; // Flag to check if initial loading is done
@@ -86,7 +86,7 @@ export class Game {
             const savedPlayerData = this.loadPlayerData();
             let initialPlayerPos = { x: this.renderer.getWidth() / 2, y: this.renderer.getHeight() / 2 };
             // Load currentSceneId from save data if available
-            this.currentSceneId = savedPlayerData ? savedPlayerData.currentSceneId : 'defaultForest';
+            this.currentSceneId = savedPlayerData ? savedPlayerData.currentSceneId : 'world-0-0';
 
             if (savedPlayerData) {
                 initialPlayerPos = savedPlayerData.position;
@@ -294,16 +294,12 @@ export class Game {
 
         // TEMP: Check for Debug Teleport
         if (this.inputHandler.teleportDebugPressed) {
-            console.log("Debug Teleport Key Pressed: Saving current scene first...");
             // Save current scene state BEFORE changing
-            this.currentScene.save().then(() => { 
-                console.log("Current scene saved, proceeding with teleport...");
-                this.changeScene('defaultForest');
+            this.currentScene.save().then(() => {
+                this.changeScene('world-0-0');
             }).catch(err => {
                 console.error("Error saving scene before teleport:", err);
-                // Decide if we should still teleport or not?
-                // For now, let's still teleport even if save fails.
-                this.changeScene('defaultForest');
+                this.changeScene('world-0-0');
             });
             // Exit update early to prevent further processing while async save/change happens
             return; 
@@ -473,14 +469,11 @@ export class Game {
         if (!this.player || !this.currentScene) return;
         const oldSceneId = this.currentSceneId;
 
-        console.log(`Changing scene from ${oldSceneId} to ${newSceneId}`);
         this.isLoading = true; 
 
         // 1. Save the *outgoing* scene state
-        console.log(`Saving state for outgoing scene [${oldSceneId}]...`);
         try {
             await this.currentScene.save(); 
-            console.log(`Outgoing scene [${oldSceneId}] saved.`);
         } catch (error) {
             console.error(`Error saving outgoing scene [${oldSceneId}]:`, error);
         }
@@ -509,7 +502,6 @@ export class Game {
              
              this.player.x = targetPlayerX;
              this.player.y = targetPlayerY;
-             console.log(`Player position set near exit in interior scene ${newSceneId} to (${this.player.x.toFixed(0)}, ${this.player.y.toFixed(0)})`);
         }
         // Check for targetPosition passed via context (e.g., exiting a house)
         else if (contextData && contextData.targetPosition && 
@@ -518,26 +510,28 @@ export class Game {
         {
             this.player.x = contextData.targetPosition.x;
             this.player.y = contextData.targetPosition.y;
-            console.log(`Player position set from context data in scene ${newSceneId} to (${this.player.x.toFixed(0)}, ${this.player.y.toFixed(0)})`);
         } else {
-            // Fallback to center for other scenes (like defaultForest or roadRoom)
+            // Fallback to center for other scenes
             const dimensions = this.currentScene.getWorldDimensions(); 
             this.player.x = dimensions.width / 2;
             this.player.y = dimensions.height / 2;
-            console.log(`Player position reset to center in new scene ${newSceneId} to (${this.player.x.toFixed(0)}, ${this.player.y.toFixed(0)})`);
         }
 
         // 5. Reset input state
         this.inputHandler.resetFrameState(); 
         this.inputHandler.resetMovement(); 
 
-        this.isLoading = false; 
-        console.log(`Scene changed successfully to ${newSceneId}.`);
+        this.isLoading = false;
     }
     // --- End Scene Transition ---
 
     // Add getter for current scene ID
     public getCurrentSceneId(): string {
         return this.currentSceneId;
+    }
+
+    // Add getter for current scene instance
+    public getCurrentScene(): any {
+        return this.currentScene;
     }
 } 

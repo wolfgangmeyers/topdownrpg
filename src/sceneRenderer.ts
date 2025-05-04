@@ -88,8 +88,9 @@ export class SceneRenderer {
 
         // --- Draw World Elements ---
         this.drawTerrain();
-        this.drawStaticObjects();
+        this.drawStaticObjects(creativeModeEnabled);
         this.drawDroppedItems();
+        this.drawEdgeIndicators();
         this.drawPickupPrompt(closestPickupItem);
         this.drawPlayer();
         this.drawEquippedItem(creativeModeEnabled); // Pass flag
@@ -142,7 +143,7 @@ export class SceneRenderer {
         }
     }
 
-    private drawStaticObjects(): void {
+    private drawStaticObjects(creativeModeEnabled: boolean): void {
         this.entityManager.staticObjects.forEach(obj => {
             let assetPath: string | undefined = undefined;
 
@@ -273,5 +274,44 @@ export class SceneRenderer {
         bounds.forEach(bound => {
             this.coreRenderer.drawDebugRect(bound.box, bound.color);
         });
+    }
+
+    // New method to draw edge indicators
+    private drawEdgeIndicators(): void {
+        // Get world dimensions
+        const worldWidth = this.worldWidth;
+        const worldHeight = this.worldHeight;
+        
+        // Get player position from the reference
+        const playerX = this.player.x;
+        const playerY = this.player.y;
+        
+        // Define the edge threshold - how close to the edge before showing indicator
+        const edgeThreshold = 100;
+        
+        // Check each edge and draw indicator if player is near
+        if (playerX < edgeThreshold) {
+            // Near left/west edge
+            const rect = { x: 0, y: 0, width: 10, height: this.worldHeight };
+            this.coreRenderer.drawDebugRect(rect, 'rgba(255, 0, 0, 0.5)');
+        }
+        
+        if (playerX > worldWidth - edgeThreshold) {
+            // Near right/east edge
+            const rect = { x: worldWidth - 10, y: 0, width: 10, height: this.worldHeight };
+            this.coreRenderer.drawDebugRect(rect, 'rgba(255, 0, 0, 0.5)');
+        }
+        
+        if (playerY < edgeThreshold) {
+            // Near top/north edge
+            const rect = { x: 0, y: 0, width: this.worldWidth, height: 10 };
+            this.coreRenderer.drawDebugRect(rect, 'rgba(255, 0, 0, 0.5)');
+        }
+        
+        if (playerY > worldHeight - edgeThreshold) {
+            // Near bottom/south edge
+            const rect = { x: 0, y: worldHeight - 10, width: this.worldWidth, height: 10 };
+            this.coreRenderer.drawDebugRect(rect, 'rgba(255, 0, 0, 0.5)');
+        }
     }
 } 
