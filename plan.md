@@ -97,6 +97,9 @@ This document outlines the plan for creating a web-based, top-down action RPG us
 *   **Systems:** Expand inventory, combat, NPC behavior.
 *   **Audio:** Integrate sound effects (`AudioPlayer`).
 *   **Persistence:** Implement game saving/loading (`SceneStateManager` for scene, `Game` for player progress).
+*   **World Management:** Implement utilities to manage the world grid:
+    *   "Delete Other Scenes" button in Creative Mode to clean up unused scenes while preserving the current scene and any linked interior scenes.
+    *   Scene visualization tools (future enhancement).
 *   **Polish:** Bug fixing, performance optimization, balancing.
 
 ## 8. Tile-Based Terrain System (Implemented via `TerrainManager`)

@@ -5,7 +5,12 @@ const SCENE_STORE_NAME = 'scenes';
 // Interface for the scene state we expect to store/retrieve
 // (Duplicate or import from scene.ts - let's keep it simple for now)
 interface SavedSceneState {
-    objects: { type: string; x: number; y: number }[]; // Simplified for DB structure
+    objects: { 
+        type: string; 
+        x: number; 
+        y: number;
+        id?: string; // House objects store an ID property
+    }[]; // Simplified for DB structure
     // Adjacent scene references
     northSceneId?: string | null;
     eastSceneId?: string | null;
@@ -151,4 +156,116 @@ export async function deleteSceneState(sceneId: string): Promise<void> {
             reject(new Error(`Transaction error deleting scene state: ${transaction.error}`));
         }
     });
+}
+
+/**
+ * Retrieves all scene IDs from the database.
+ * @returns {Promise<string[]>} A promise resolving with an array of all scene IDs.
+ */
+export async function getAllSceneIds(): Promise<string[]> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(SCENE_STORE_NAME, 'readonly');
+        const store = transaction.objectStore(SCENE_STORE_NAME);
+        const request = store.getAllKeys();
+
+        request.onsuccess = () => {
+            // Convert IDBValidKey array to string array
+            const sceneIds = Array.from(request.result).map(key => String(key));
+            console.log(`Retrieved ${sceneIds.length} scene IDs from database.`);
+            resolve(sceneIds);
+        };
+
+        request.onerror = () => {
+            console.error(`Error retrieving scene IDs:`, request.error);
+            reject(new Error(`Error retrieving scene IDs: ${request.error}`));
+        };
+
+        transaction.oncomplete = () => {
+            db.close();
+        };
+        transaction.onerror = () => {
+            console.error(`Transaction error retrieving scene IDs:`, transaction.error);
+            db.close();
+            reject(new Error(`Transaction error retrieving scene IDs: ${transaction.error}`));
+        }
+    });
+}
+
+/**
+ * Deletes all scenes from the database except for the specified scene and its linked interior scenes.
+ * First loads each scene to be deleted, cleans up all entities within it, then deletes it.
+ * @param {string} exceptSceneId The ID of the scene to keep.
+ * @returns {Promise<string[]>} A promise resolving with an array of deleted scene IDs.
+ */
+export async function deleteAllScenesExcept(exceptSceneId: string): Promise<string[]> {
+    // Get all scene IDs first
+    const allSceneIds = await getAllSceneIds();
+    
+    // Create a set of scene IDs to preserve
+    const sceneIdsToPreserve = new Set<string>([exceptSceneId]);
+    
+    // Load the scene we want to keep to check for houses with interior scenes
+    try {
+        const sceneState = await loadSceneState(exceptSceneId);
+        if (sceneState && sceneState.objects) {
+            // Look for House objects and preserve their interior scenes
+            sceneState.objects.forEach(obj => {
+                // Houses store their ID which is used to create interior scene IDs
+                if (obj.type === 'House' && obj.id) {
+                    const interiorSceneId = `interior-${obj.id}`;
+                    sceneIdsToPreserve.add(interiorSceneId);
+                    console.log(`Preserving interior scene: ${interiorSceneId}`);
+                }
+            });
+        }
+    } catch (error) {
+        console.error(`Error loading scene ${exceptSceneId} to check for interior scenes:`, error);
+    }
+    
+    // Filter out the scenes to preserve
+    const sceneIdsToDelete = allSceneIds.filter(id => !sceneIdsToPreserve.has(id));
+    
+    if (sceneIdsToDelete.length === 0) {
+        console.log(`No scenes to delete (only found scenes to preserve: ${Array.from(sceneIdsToPreserve).join(', ')})`);
+        return [];
+    }
+    
+    console.log(`Preserving ${sceneIdsToPreserve.size} scenes, deleting ${sceneIdsToDelete.length} scenes...`);
+    
+    // Delete each scene not in the preserve list
+    const deletedScenes: string[] = [];
+    for (const sceneId of sceneIdsToDelete) {
+        try {
+            // First, load the scene state
+            const sceneState = await loadSceneState(sceneId);
+            
+            if (sceneState) {
+                // Clear all objects from the scene to properly handle House deletions
+                // This prevents orphaned interior scenes
+                if (sceneState.objects && Array.isArray(sceneState.objects)) {
+                    // Create a new state with empty objects array
+                    const cleanedState = {
+                        ...sceneState,
+                        objects: [], // Clear all objects
+                        droppedItems: [] // Clear all items
+                    };
+                    
+                    // Save the cleaned state back to the database
+                    await saveSceneState(sceneId, cleanedState);
+                    console.log(`Cleaned objects from scene ${sceneId} before deletion`);
+                }
+            }
+            
+            // Now delete the scene
+            await deleteSceneState(sceneId);
+            deletedScenes.push(sceneId);
+            
+        } catch (error) {
+            console.error(`Failed to delete scene ${sceneId}:`, error);
+        }
+    }
+    
+    console.log(`Deleted ${deletedScenes.length} scenes successfully.`);
+    return deletedScenes;
 } 

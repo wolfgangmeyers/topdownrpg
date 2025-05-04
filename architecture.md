@@ -110,8 +110,17 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **`doorExit.ts`**: Static object entity class. Stores `targetSceneId` and `targetPosition`. Has `setTarget` method.
 *   **`item.ts`**: Item definition module (`ItemType`, `Item` interface, `ITEM_CONFIG`, `getItemConfig`).
 *   **`droppedItem.ts`**: Defines the `DroppedItem` interface used by `EntityManager` and `SceneRenderer`.
-*   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. (`DoorExit` config restored but filtered from UI panel). Manages its own state, input handling, drawing. Loads its own assets.
-*   **`db.ts`**: IndexedDB persistence layer abstraction (`saveSceneState`, `loadSceneState`). Added `deleteSceneState` function.
+*   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. 
+    *   (`DoorExit` config restored but filtered from UI panel). 
+    *   Manages its own state, input handling, drawing. Loads its own assets.
+    *   Includes a "Delete Other Scenes" button that preserves the current scene and any linked interior scenes.
+    *   Implements confirmation dialog pattern with status messages for scene deletion operations.
+    *   Tracks the current scene ID (passed from Game) to know which scene to preserve during deletion.
+*   **`db.ts`**: IndexedDB persistence layer abstraction. 
+    *   Provides `saveSceneState`, `loadSceneState`, `deleteSceneState` functions.
+    *   Added `getAllSceneIds` function to retrieve all scene IDs from the database.
+    *   Added `deleteAllScenesExcept` function that preserves the specified scene ID and any interior scenes linked to houses in that scene.
+    *   Scene deletion process first cleans objects from scenes before removing them to prevent orphaned interiors.
 *   **`terrain.ts`**: Terrain definition module (`TerrainType`, `TerrainConfig`, `TERRAIN_CONFIG`, `getTerrainConfig`). (`wood-floor` added).
 *   **`npc.ts`, `ui.ts`**: Placeholder modules for future features.
 

@@ -3,6 +3,7 @@ import { InputHandler } from '../input';
 import { AssetLoader } from '../assets';
 import { TerrainType, TERRAIN_CONFIG } from '../terrain'; // Import terrain types and config
 import { ItemType, ITEM_CONFIG } from '../item';
+import { deleteAllScenesExcept, getAllSceneIds } from '../db'; // Import deleteAllScenesExcept and getAllSceneIds functions
 
 // Define placeable object types (Moved from game.ts)
 export type PlaceableObjectType = 'Tree' | 'House' | 'DoorExit'; // Restored DoorExit
@@ -26,6 +27,7 @@ export class CreativeModeSelector {
     private renderer: Renderer;
     private input: InputHandler;
     private assetLoader: AssetLoader;
+    private currentSceneId: string = ''; // Track current scene ID
 
     public items: CreativeModeItem[] = [];
     public selectedObjectType: PlaceableObjectType | null = 'Tree'; // Default selection
@@ -38,17 +40,25 @@ export class CreativeModeSelector {
     private readonly itemsPerRow = 5; 
     private readonly panelStartX = this.panelPadding;
     private readonly panelStartY = this.panelPadding;
+    
+    // UI state for delete button
+    private isConfirmingDelete = false;
+    private isDeletingScenes = false;
+    private deletionResult: string | null = null;
+    private resultTimeoutId: number | null = null;
 
     constructor(
         renderer: Renderer, 
         input: InputHandler, 
-        assetLoader: AssetLoader, 
-        itemConfig: Record<string, import('../item').Item> // Pass ITEM_CONFIG directly
+        assetLoader: AssetLoader,
+        itemConfig: Record<string, import('../item').Item>,
+        currentSceneId: string // Pass current scene ID to constructor
     ) {
         this.renderer = renderer;
         this.input = input;
         this.assetLoader = assetLoader;
         this.itemConfig = itemConfig; // Assign passed config
+        this.currentSceneId = currentSceneId;
         this.initializeItems(); // Initialize items immediately
     }
 
@@ -120,6 +130,14 @@ export class CreativeModeSelector {
         }
     }
 
+    /**
+     * Updates the current scene ID
+     * @param sceneId The ID of the current scene
+     */
+    public updateCurrentSceneId(sceneId: string): void {
+        this.currentSceneId = sceneId;
+    }
+
     // Moved from Game.handleCreativeModeUIClick
     public update(isCreativeModeEnabled: boolean): void {
         if (!isCreativeModeEnabled || (!this.input.uiMouseClicked && !this.input.uiDropActionClicked)) {
@@ -134,6 +152,59 @@ export class CreativeModeSelector {
         const clickX = this.input.mouseScreenPosition.x;
         const clickY = this.input.mouseScreenPosition.y;
 
+        // Check if delete button was clicked
+        const deleteButtonBounds = this.getDeleteButtonBounds();
+        if (clickX >= deleteButtonBounds.x && clickX <= deleteButtonBounds.x + deleteButtonBounds.width &&
+            clickY >= deleteButtonBounds.y && clickY <= deleteButtonBounds.y + deleteButtonBounds.height) {
+            
+            // If we're not already in confirmation mode, show confirmation prompt
+            if (!this.isConfirmingDelete) {
+                this.isConfirmingDelete = true;
+                // Prevent this click from also triggering a world click
+                this.input.consumeClick();
+                return;
+            }
+            
+            // If we are in confirmation mode, proceed with deletion
+            this.isConfirmingDelete = false;
+            this.isDeletingScenes = true;
+            
+            // Execute the delete operation asynchronously
+            this.executeDeleteAllScenes()
+                .then(() => {
+                    // Success - handling happens in executeDeleteAllScenes
+                })
+                .catch(error => {
+                    console.error("Error during scene deletion:", error);
+                    this.deletionResult = "Error deleting scenes";
+                })
+                .then(() => {
+                    // This will run regardless of success or failure (like finally)
+                    this.isDeletingScenes = false;
+                    
+                    // Clear any existing timeout
+                    if (this.resultTimeoutId !== null) {
+                        window.clearTimeout(this.resultTimeoutId);
+                    }
+                    
+                    // Set a timeout to clear the result message after 5 seconds
+                    this.resultTimeoutId = window.setTimeout(() => {
+                        this.deletionResult = null;
+                        this.resultTimeoutId = null;
+                    }, 5000);
+                });
+            
+            // Prevent this click from also triggering a world click
+            this.input.consumeClick();
+            return;
+        } else if (this.isConfirmingDelete) {
+            // If we clicked anywhere else while in confirmation mode, cancel it
+            this.isConfirmingDelete = false;
+            this.input.consumeClick();
+            return;
+        }
+
+        // Handle regular item selection (existing code)
         let clickedItem: CreativeModeItem | null = null;
         for (let i = 0; i < this.items.length; i++) {
             const item = this.items[i];
@@ -177,27 +248,87 @@ export class CreativeModeSelector {
         }
     }
 
+    /**
+     * Executes the deletion of all scenes except the current one and linked interior scenes
+     * @returns Promise<void>
+     */
+    private async executeDeleteAllScenes(): Promise<void> {
+        if (!this.currentSceneId) {
+            this.deletionResult = "Error: No current scene ID";
+            return;
+        }
+        
+        try {
+            // Get all scene IDs to know the total count
+            const allSceneIds = await getAllSceneIds();
+            const totalSceneCount = allSceneIds.length;
+            
+            const deletedScenes = await deleteAllScenesExcept(this.currentSceneId);
+            const preservedCount = totalSceneCount - deletedScenes.length;
+            
+            if (deletedScenes.length === 0) {
+                this.deletionResult = `No scenes deleted (${preservedCount} preserved)`;
+            } else {
+                this.deletionResult = `Deleted ${deletedScenes.length} scenes (${preservedCount} preserved)`;
+            }
+        } catch (error) {
+            console.error("Failed to delete scenes:", error);
+            this.deletionResult = "Failed to delete scenes";
+            throw error;
+        }
+    }
+
+    /**
+     * Gets the position and size of the delete button
+     */
+    private getDeleteButtonBounds() {
+        // Calculate panel dimensions needed for item slots
+        const actualNumRows = Math.ceil(this.items.length / this.itemsPerRow);
+        const numRowsToDraw = Math.max(2, actualNumRows); // Ensure at least 2 rows are drawn
+        
+        // Position the delete button below the item grid
+        const buttonY = this.panelStartY + numRowsToDraw * (this.panelSlotSize + this.panelPadding) + 10;
+        
+        // Center the button in the panel
+        const panelWidth = this.itemsPerRow * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
+        const buttonWidth = 200;
+        const buttonX = this.panelStartX + (panelWidth - buttonWidth) / 2;
+        
+        return {
+            x: buttonX,
+            y: buttonY,
+            width: buttonWidth,
+            height: 40
+        };
+    }
+
     // Moved from Renderer.drawCreativePanel
     public draw(isCreativeModeEnabled: boolean): void {
         if (!isCreativeModeEnabled) return;
 
         const ctx = this.renderer.getContext();
         
-        // Calculate panel dimensions needed
+        // Calculate panel dimensions needed for item slots
         const actualNumRows = Math.ceil(this.items.length / this.itemsPerRow);
         const numRowsToDraw = Math.max(2, actualNumRows); // Ensure at least 2 rows are drawn
         const panelWidth = this.itemsPerRow * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
-        // Use numRowsToDraw for height calculation
-        const panelHeight = numRowsToDraw * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
+        
+        // Add extra height for the delete button
+        const deleteButtonHeight = 40;
+        const deleteButtonMargin = 20; // Space above and below the button
+        const panelHeight = numRowsToDraw * (this.panelSlotSize + this.panelPadding) - this.panelPadding 
+            + deleteButtonHeight + deleteButtonMargin * 2;
 
         ctx.save();
 
         // Draw background panel
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(this.panelStartX - this.panelPadding, this.panelStartY - this.panelPadding, panelWidth + this.panelPadding * 2, panelHeight + this.panelPadding * 2);
+        ctx.fillRect(this.panelStartX - this.panelPadding, this.panelStartY - this.panelPadding, 
+                    panelWidth + this.panelPadding * 2, panelHeight + this.panelPadding * 2);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.lineWidth = 2;
-        ctx.strokeRect(this.panelStartX - this.panelPadding, this.panelStartY - this.panelPadding, panelWidth + this.panelPadding * 2, panelHeight + this.panelPadding * 2);
+        ctx.strokeRect(this.panelStartX - this.panelPadding, this.panelStartY - this.panelPadding, 
+                      panelWidth + this.panelPadding * 2, panelHeight + this.panelPadding * 2);
 
         // Draw each item slot
         for (let i = 0; i < this.items.length; i++) {
@@ -237,6 +368,45 @@ export class CreativeModeSelector {
             ctx.strokeStyle = isSelected ? 'yellow' : 'rgba(255, 255, 255, 0.2)';
             ctx.lineWidth = isSelected ? 3 : 1;
             ctx.strokeRect(itemX, itemY, this.panelSlotSize, this.panelSlotSize); 
+        }
+
+        // Draw the delete button
+        const deleteButtonBounds = this.getDeleteButtonBounds();
+        
+        // Button background
+        ctx.fillStyle = this.isConfirmingDelete ? 'rgba(255, 50, 50, 0.6)' : 'rgba(220, 50, 50, 0.4)';
+        if (this.isDeletingScenes) {
+            ctx.fillStyle = 'rgba(100, 100, 100, 0.6)'; // Disabled/processing appearance
+        }
+        ctx.fillRect(deleteButtonBounds.x, deleteButtonBounds.y, deleteButtonBounds.width, deleteButtonBounds.height);
+        
+        // Button border
+        ctx.strokeStyle = this.isConfirmingDelete ? 'rgba(255, 150, 150, 0.8)' : 'rgba(255, 100, 100, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(deleteButtonBounds.x, deleteButtonBounds.y, deleteButtonBounds.width, deleteButtonBounds.height);
+        
+        // Button text
+        ctx.fillStyle = 'white';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        if (this.isDeletingScenes) {
+            ctx.fillText('Deleting scenes...', 
+                deleteButtonBounds.x + deleteButtonBounds.width / 2, 
+                deleteButtonBounds.y + deleteButtonBounds.height / 2);
+        } else if (this.isConfirmingDelete) {
+            ctx.fillText('Confirm: Delete other scenes?', 
+                deleteButtonBounds.x + deleteButtonBounds.width / 2, 
+                deleteButtonBounds.y + deleteButtonBounds.height / 2);
+        } else if (this.deletionResult) {
+            ctx.fillText(this.deletionResult, 
+                deleteButtonBounds.x + deleteButtonBounds.width / 2, 
+                deleteButtonBounds.y + deleteButtonBounds.height / 2);
+        } else {
+            ctx.fillText('Delete Other Scenes', 
+                deleteButtonBounds.x + deleteButtonBounds.width / 2, 
+                deleteButtonBounds.y + deleteButtonBounds.height / 2);
         }
 
         ctx.restore();

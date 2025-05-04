@@ -12,6 +12,7 @@ import { TerrainType, TERRAIN_CONFIG, getTerrainConfig, TerrainConfig } from './
 import { SceneRenderer } from './sceneRenderer';
 import { Game } from './game'; // Import Game
 import { DoorExit } from './doorExit'; // Import DoorExit
+import { BiomeManager, BiomeType } from './biomes'; // Import BiomeManager
 
 // --- Dropped Item Structure ---
 export interface DroppedItem {
@@ -130,6 +131,7 @@ export class GameScene extends Scene {
     private gameplayController: GameplayController;
     private creativeController: CreativeController;
     private sceneRenderer: SceneRenderer;
+    private biomeManager: BiomeManager;
     // --- End Managers ---
     private contextData: any; // Store context passed during scene change
 
@@ -150,6 +152,15 @@ export class GameScene extends Scene {
         this.entityManager = new EntityManager(assetLoader, audioPlayer);
         this.terrainManager = new TerrainManager(this.worldWidth, this.worldHeight, this.tileSize);
         this.stateManager = new SceneStateManager(this.entityManager, this.terrainManager, assetLoader, this);
+        
+        // Create the biome manager
+        this.biomeManager = new BiomeManager(
+            this.terrainManager,
+            this.entityManager,
+            this.worldWidth,
+            this.worldHeight,
+            this.tileSize
+        );
         
         // Create the controllers
         this.gameplayController = new GameplayController(
@@ -283,31 +294,25 @@ export class GameScene extends Scene {
                 console.error(`Missing DoorExit configuration in PLACEABLE_OBJECT_CONFIG`);
             }
         } else if (this.sceneId.startsWith('world-')) {
-            // World grid scene - extract coordinates if present
-            const parts = this.sceneId.split('-');
-            // Default to 15 trees, but could vary based on coordinates for different biomes later
-            const numTrees = 15;
+            // World grid scene - use BiomeManager to generate a sparse forest biome
+            console.log(`Generating biome layout for world scene: ${this.sceneId}`);
             
-            // Ensure default grid size is used
-            this.terrainManager.resizeGrid(Math.ceil(this.worldHeight / this.tileSize), Math.ceil(this.worldWidth / this.tileSize));
-            this.entityManager.populateTrees(numTrees, this.worldWidth, this.worldHeight);
-            this.terrainManager.initializeTerrainGrid();
-            
-            // Set up bidirectional link if this is a new scene
-            if (this.contextData && this.contextData.isNewScene && 
-                this.contextData.linkedDirection && this.contextData.linkedSceneId) {
-                
-                const direction = this.contextData.linkedDirection;
-                const linkedSceneId = this.contextData.linkedSceneId;
-                
-                // Set the proper directional link
-                this.setAdjacentSceneId(direction, linkedSceneId);
-            }
+            // Generate the sparse forest biome using BiomeManager, passing a callback for scene linking
+            this.biomeManager.generateBiome(
+                BiomeType.SPARSE_FOREST, 
+                this.contextData,
+                (direction, linkedSceneId) => this.setAdjacentSceneId(direction, linkedSceneId)
+            );
         } else {
-            // Handle any other scene types (legacy support)
-            this.terrainManager.resizeGrid(Math.ceil(this.worldHeight / this.tileSize), Math.ceil(this.worldWidth / this.tileSize));
-            this.entityManager.populateTrees(15, this.worldWidth, this.worldHeight);
-            this.terrainManager.initializeTerrainGrid(); 
+            // Handle any other scene types (legacy support) - also use sparse forest biome
+            console.log(`Generating biome layout for legacy scene: ${this.sceneId}`);
+            
+            // Use the same biome manager for legacy scenes
+            this.biomeManager.generateBiome(
+                BiomeType.SPARSE_FOREST, 
+                this.contextData,
+                (direction, linkedSceneId) => this.setAdjacentSceneId(direction, linkedSceneId)
+            );
         }
     }
     // --- End Default Layout ---

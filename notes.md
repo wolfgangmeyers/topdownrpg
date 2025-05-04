@@ -250,3 +250,45 @@ This file captures key decisions, techniques, and context from the development s
 *   **Audio:** An `item-drop` sound (loaded as `/assets/audio/drop.mp3`) is played by `spawnDroppedItem`.
 *   **Persistence:** Dropped items are already saved/loaded as part of the `GameScene` state persistence via IndexedDB (`droppedItems` array in `SavedSceneState`).
 *   **UI Click Handling:** UI components (`CreativeModeSelector`, `Game.handleInventoryClick`) now call `InputHandler.consumeClick()` after handling a mouse click within their bounds. This prevents the click from also triggering world interactions (like placing the currently selected creative item) in the same frame. 
+
+## Feature: Delete Other Scenes Utility
+
+*   **Goal:** Provide a way to clean up the database by removing unused or experimental scenes while preserving the current one.
+*   **Implementation:**
+    *   **UI Component:**
+        *   Added a red "Delete Other Scenes" button to the bottom of the Creative Mode selector panel.
+        *   Button includes a confirmation flow to prevent accidental deletion.
+        *   Shows status messages during and after the operation, including how many scenes were deleted and preserved.
+        *   UI state tracked by flags in `CreativeModeSelector`: `isConfirmingDelete`, `isDeletingScenes`, `deletionResult`.
+        *   Status message automatically clears after 5 seconds using a `setTimeout`.
+    *   **Database Functions:**
+        *   Added `getAllSceneIds` to `db.ts` which retrieves all scene IDs from IndexedDB.
+        *   Implemented `deleteAllScenesExcept(exceptSceneId)` which:
+            *   Loads the scene to be preserved to identify houses.
+            *   Creates a set of scene IDs to preserve that includes the specified scene and any interior scenes linked to houses in that scene (`interior-${house.id}`).
+            *   For each scene to delete, loads it first and cleans objects/items to prevent orphaned interior scenes.
+            *   Only then deletes the scene from the database.
+    *   **Scene Integrity:**
+        *   The system intelligently preserves related scenes by detecting houses in the current scene.
+        *   This prevents breaking the game by deleting interior scenes that are still linked to houses.
+        *   Cleaning objects from scenes before deletion ensures proper cleanup of any housing relationships.
+    *   **Integration with Game:**
+        *   `Game` class passes the current scene ID to `CreativeModeSelector` on creation.
+        *   Updated `Game.changeScene` to call `CreativeModeSelector.updateCurrentSceneId` when changing scenes.
+*   **Usage Flow:**
+    1.  Player enters creative mode (C key).
+    2.  Player clicks "Delete Other Scenes" button.
+    3.  Button changes to confirmation state ("Confirm: Delete other scenes?").
+    4.  Player clicks again to confirm or elsewhere to cancel.
+    5.  System identifies scenes to preserve (current + linked interiors).
+    6.  System cleans and deletes other scenes.
+    7.  Button shows result message (e.g., "Deleted 3 scenes (2 preserved)").
+*   **Benefits:**
+    *   Allows for easier testing and development by clearing experimental scenes.
+    *   Prevents database clutter from world exploration.
+    *   Maintains scene integrity by preserving necessary relationships.
+    *   Provides clear feedback about the operation results.
+*   **Future Enhancements:**
+    *   Scene browser/visualizer to see all existing scenes.
+    *   More granular scene selection for deletion.
+    *   World map generation and visualization tools. 

@@ -21,9 +21,9 @@
   <rect x="5" y="5" width="110" height="90" rx="3" ry="3" fill="#78909C" stroke="#546E7A" stroke-width="1.5" />
 
   <!-- Roof Area (Covers top 2/3rds approx) -->
-  <rect x="15" y="5" width="90" height="60" fill="url(#roofTexture)" stroke="#6D4C41" stroke-width="1" />
+  <rect x="5" y="5" width="110" height="60" fill="url(#roofTexture)" stroke="#6D4C41" stroke-width="1" />
   <!-- Roof Ridge (Adjusted Y) -->
-  <line x1="15" y1="35" x2="105" y2="35" stroke="#5D4037" stroke-width="2" />
+  <line x1="5" y1="35" x2="115" y2="35" stroke="#5D4037" stroke-width="2" />
 
   <!-- Door (Centered bottom wall) -->
   <rect x="50" y="80" width="20" height="15" fill="url(#woodGrain)" stroke="#5D4037" stroke-width="1.5" />

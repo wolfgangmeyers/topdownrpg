@@ -48,7 +48,13 @@ export class Game {
         this.assetLoader = new AssetLoader();
         this.audioPlayer = new AudioPlayer(); // Instantiate AudioPlayer
         // Instantiate the CreativeModeSelector, passing dependencies
-        this.creativeModeSelector = new CreativeModeSelector(this.renderer, this.inputHandler, this.assetLoader, ITEM_CONFIG);
+        this.creativeModeSelector = new CreativeModeSelector(
+            this.renderer, 
+            this.inputHandler, 
+            this.assetLoader, 
+            ITEM_CONFIG,
+            this.currentSceneId // Pass current scene ID
+        );
         this.inputHandler.initialize(canvas, this.renderer);
         // --- Resume Audio Context on User Interaction ---
         // Add a listener to resume audio context on the first click/keypress
@@ -65,156 +71,58 @@ export class Game {
     }
 
     private async init(): Promise<void> {
-        this.isLoading = true;
-        console.log("Initializing game systems...");
         try {
+            this.isLoading = true;
+            console.log("Game Initializing...");
+
             // --- Load Sounds ---
-            console.log("Loading sounds...");
-            // Using Promise.all to load sounds concurrently
-            await Promise.all([
-                this.audioPlayer.loadSound('axe-hit', '/assets/audio/axe-hit.mp3'), // Adjusted path
-                this.audioPlayer.loadSound('axe-miss', '/assets/audio/axe-miss.mp3'), // Adjusted path
-                this.audioPlayer.loadSound('tree-fall', '/assets/audio/tree-fall.mp3'), // Adjusted path
-                this.audioPlayer.loadSound('pickup', '/assets/audio/pickup.mp3'), // Add pickup sound
-                this.audioPlayer.loadSound('item-drop', '/assets/audio/drop.mp3') // Add item drop sound
-                // Add other sounds here
-            ]);
-            console.log("Sounds loaded.");
+            await this.loadSounds(); // Wait for sounds to load
             // --- End Load Sounds ---
+            
+            // Load creative mode selector assets
+            await this.creativeModeSelector.loadAssets();
 
-            // --- Load Player Data (from localStorage) ---
-            const savedPlayerData = this.loadPlayerData();
-            let initialPlayerPos = { x: this.renderer.getWidth() / 2, y: this.renderer.getHeight() / 2 };
-            // Load currentSceneId from save data if available
-            this.currentSceneId = savedPlayerData ? savedPlayerData.currentSceneId : 'world-0-0';
-
+            // --- Load Player Data ---
+            const savedPlayerData = this.loadPlayerData(); // Get currentSceneId from saved data
             if (savedPlayerData) {
-                initialPlayerPos = savedPlayerData.position;
-                console.log(`Player save data found: Starting in scene [${this.currentSceneId}] at (${initialPlayerPos.x.toFixed(0)}, ${initialPlayerPos.y.toFixed(0)})`);
-            } else {
-                 console.log(`No player save data found. Starting in default scene: ${this.currentSceneId}`);
+                this.currentSceneId = savedPlayerData.currentSceneId;
             }
             // --- End Load Player Data ---
 
-            // Load common assets (like player) first
+            console.log(`Starting with scene: ${this.currentSceneId}`);
+            
+            // Create player with loaded data if exists
             const playerSvgPath = '/assets/svg/player.svg';
             await this.assetLoader.loadImages([playerSvgPath]);
-
             const playerImg = this.assetLoader.getImage(playerSvgPath);
             const playerWidth = playerImg ? playerImg.naturalWidth : 50;
             const playerHeight = playerImg ? playerImg.naturalHeight : 50;
             
-            // Create player instance (position will be set *after* creation)
-            this.player = new Player(
-                initialPlayerPos.x, // Use loaded/default position
-                initialPlayerPos.y,
-                playerWidth,
-                playerHeight,
-                playerSvgPath
-            );
-
-            // --- Restore Player Inventory & Equipment from Save Data ---
-            if (this.player && savedPlayerData) {
-                const player = this.player; // Assign to local const
-                console.log("Restoring player inventory and equipment...");
-                let assetsToLoad = new Set<string>();
-
-                // Clear default inventory/equipment before loading
-                player.inventory.clear();
-                player.equippedItemId = null;
-
-                // Restore inventory
-                if (savedPlayerData.inventory && Array.isArray(savedPlayerData.inventory)) {
-                    savedPlayerData.inventory.forEach(savedSlot => {
-                        const itemConfig = ITEM_CONFIG[savedSlot.id];
-                        if (itemConfig) {
-                            player.addItem(savedSlot.id, savedSlot.quantity);
-                            // Add asset path to set for loading
-                            assetsToLoad.add(itemConfig.assetPath);
-                        } else {
-                            console.warn(`Item config for saved item '${savedSlot.id}' not found. Skipping.`);
-                        }
-                    });
-                }
-
-                // Restore equipped item (only if it exists in restored inventory)
-                if (savedPlayerData.equippedItemId && player.inventory.has(savedPlayerData.equippedItemId)) {
-                    player.equipItem(savedPlayerData.equippedItemId);
-                    // Asset should already be in assetsToLoad from inventory loop
-                } else if (savedPlayerData.equippedItemId) {
-                    console.warn(`Saved equipped item '${savedPlayerData.equippedItemId}' not found in restored inventory. Unequipping.`);
-                }
-
-                // Load assets for all restored items
-                if (assetsToLoad.size > 0) {
-                    console.log("Loading assets for restored items...");
-                    await this.assetLoader.loadImages(Array.from(assetsToLoad));
-                }
-                 console.log('Restored Inventory:', player.inventory);
-                 console.log('Restored Equipped Item ID:', player.equippedItemId);
-
-            } else if (this.player && !savedPlayerData) {
-                // Use local const here too for consistency, though maybe not strictly needed
-                const player = this.player;
-                // --- Give Starting Items (Only if NO save data) --- 
-                console.log("No save data found, giving default starting items...");
-                const axeId = 'axe';
-                if (ITEM_CONFIG[axeId]) {
-                    // Ensure asset is loaded
-                    await this.assetLoader.loadImages([ITEM_CONFIG[axeId].assetPath]);
-                    player.addItem(axeId, 1);
-                    player.equipItem(axeId);
-                } else {
-                    console.warn(`Item config for starting item '${axeId}' not found.`);
-                }
-                 console.log('Default Inventory:', player.inventory);
-            }
-            // --- End Item Handling ---
-
-            // --- Final Check: Ensure Player has Axe for Testing ---
-            if (this.player && !this.player.inventory.has('axe')) {
-                 console.warn("Player didn't have axe after load/init. Giving one for testing.");
-                 const axeId = 'axe';
-                 if (ITEM_CONFIG[axeId]) {
-                     // Ensure asset is loaded (might be redundant, but safe)
-                     await this.assetLoader.loadImages([ITEM_CONFIG[axeId].assetPath]);
-                     this.player.addItem(axeId, 1);
-                     // Equip it if nothing else is equipped
-                     if (!this.player.equippedItemId) {
-                         this.player.equipItem(axeId);
-                     }
-                 } else {
-                     console.error(`Item config for required testing item '${axeId}' not found!`);
-                 }
-            }
-            // --- End Final Check ---
-
-            // --- Load Creative Mode Assets --- 
-            // Initialization happens in selector constructor, now load assets
-            await this.creativeModeSelector.loadAssets();
-            // --- End Creative Mode Init ---
-
-            // Load the initial scene using the determined ID
-            if (!this.player) throw new Error("Player not initialized before scene creation!");
+            this.player = new Player(0, 0, playerWidth, playerHeight, playerSvgPath);
             
-            // Create GameScene instance (constructor updated separately)
+            // Restore save data if it exists
+            await this.restorePlayerState();
+            
+            // Create initial scene, using the loaded scene ID
             this.currentScene = new GameScene(this.currentSceneId, this, this.renderer, this.inputHandler, this.assetLoader, this.player, this.audioPlayer);
-            await this.currentScene.load(); // Load scene state
-
-            this.isLoading = false;
-            console.log("Game initialization complete.");
+            
+            // Load the scene async (asset loading, state retrieval, etc)
+            await this.currentScene.load();
+            
+            // Set player to scene center initially
+            // (better to set explicitly than trust the save data, as scene could have changed)
+            const dimensions = this.currentScene.getWorldDimensions();
+            this.player.x = dimensions.width / 2;
+            this.player.y = dimensions.height / 2;
+            
+            // Start game loop once initialization is complete
+            this.lastTimestamp = performance.now();
             requestAnimationFrame(this.update.bind(this));
-
-            // Initialize NPCs later
-            // this.npcs.push(new NPC('npc1', 100, 100, '/assets/svg/npc.svg', ['Hello there!']));
-            // await this.assetLoader.loadImages(this.npcs.map(npc => npc.svgPath)); // Load NPC assets too
-
+            this.isLoading = false;
+            console.log("Game Initialized");
         } catch (error) {
-            console.error("Game initialization failed:", error);
-            this.isLoading = false; // Ensure loading state is false even on error
-             // Optionally display an error message on the canvas
-            this.renderer.clear();
-            this.renderer.drawText('Error during initialization. Check console.', 50, 50, 'red', '16px Arial');
+            console.error("Error initializing game:", error);
+            // Possibly show error to user
         }
     }
 
@@ -480,6 +388,8 @@ export class Game {
 
         // 2. Update player state to reflect the *new* scene ID
         this.currentSceneId = newSceneId; 
+        // Update the CreativeModeSelector with the new scene ID
+        this.creativeModeSelector.updateCurrentSceneId(newSceneId);
         this.savePlayerData(); 
 
         // 3. Create and load the new scene instance
@@ -533,5 +443,86 @@ export class Game {
     // Add getter for current scene instance
     public getCurrentScene(): any {
         return this.currentScene;
+    }
+
+    // Add the loadSounds method
+    private async loadSounds(): Promise<void> {
+        console.log("Loading sounds...");
+        // Using Promise.all to load sounds concurrently
+        await Promise.all([
+            this.audioPlayer.loadSound('axe-hit', '/assets/audio/axe-hit.mp3'),
+            this.audioPlayer.loadSound('axe-miss', '/assets/audio/axe-miss.mp3'),
+            this.audioPlayer.loadSound('tree-fall', '/assets/audio/tree-fall.mp3'),
+            this.audioPlayer.loadSound('pickup', '/assets/audio/pickup.mp3'),
+            this.audioPlayer.loadSound('item-drop', '/assets/audio/drop.mp3')
+            // Add other sounds here
+        ]);
+        console.log("Sounds loaded.");
+    }
+
+    // Add the restorePlayerState method
+    private async restorePlayerState(): Promise<void> {
+        if (!this.player) return;
+        
+        const savedPlayerData = this.loadPlayerData();
+        
+        if (savedPlayerData) {
+            console.log("Restoring player inventory and equipment...");
+            let assetsToLoad = new Set<string>();
+            
+            // Clear default inventory/equipment before loading
+            this.player.inventory.clear();
+            this.player.equippedItemId = null;
+
+            // Restore inventory
+            if (savedPlayerData.inventory && Array.isArray(savedPlayerData.inventory)) {
+                savedPlayerData.inventory.forEach(savedSlot => {
+                    const itemConfig = ITEM_CONFIG[savedSlot.id];
+                    if (itemConfig) {
+                        this.player!.addItem(savedSlot.id, savedSlot.quantity);
+                        // Add asset path to set for loading
+                        assetsToLoad.add(itemConfig.assetPath);
+                    } else {
+                        console.warn(`Item config for saved item '${savedSlot.id}' not found. Skipping.`);
+                    }
+                });
+            }
+
+            // Restore equipped item (only if it exists in restored inventory)
+            if (savedPlayerData.equippedItemId && this.player.inventory.has(savedPlayerData.equippedItemId)) {
+                this.player.equipItem(savedPlayerData.equippedItemId);
+            } else if (savedPlayerData.equippedItemId) {
+                console.warn(`Saved equipped item '${savedPlayerData.equippedItemId}' not found in restored inventory. Unequipping.`);
+            }
+
+            // Load assets for all restored items
+            if (assetsToLoad.size > 0) {
+                console.log("Loading assets for restored items...");
+                await this.assetLoader.loadImages(Array.from(assetsToLoad));
+            }
+        } else {
+            // Give starting items if no save data
+            console.log("No save data found, giving default starting items...");
+            const axeId = 'axe';
+            if (ITEM_CONFIG[axeId]) {
+                // Ensure asset is loaded
+                await this.assetLoader.loadImages([ITEM_CONFIG[axeId].assetPath]);
+                this.player.addItem(axeId, 1);
+                this.player.equipItem(axeId);
+            }
+        }
+        
+        // Ensure player has axe for testing
+        if (this.player && !this.player.inventory.has('axe')) {
+            console.warn("Player didn't have axe after load/init. Giving one for testing.");
+            const axeId = 'axe';
+            if (ITEM_CONFIG[axeId]) {
+                await this.assetLoader.loadImages([ITEM_CONFIG[axeId].assetPath]);
+                this.player.addItem(axeId, 1);
+                if (!this.player.equippedItemId) {
+                    this.player.equipItem(axeId);
+                }
+            }
+        }
     }
 } 
