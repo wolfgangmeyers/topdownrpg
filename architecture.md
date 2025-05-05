@@ -81,14 +81,15 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Delegates all scene transition logic to the `SceneTransitionSystem`.
     *   Provides getter for closest pickup item.
 *   **`creativeController.ts`**: `CreativeController` class.
-    *   Handles creative mode input/logic: placement/removal of objects/terrain/items via `EntityManager`/`TerrainManager`.
-    *   Handles deletion: If deleting a `House`, calls `db.deleteSceneState(\`interior-\${house.id}\`)` before removing the house object.
+    *   Handles creative mode logic for object/terrain/item placement and deletion.
+    *   Supports both DELETE key and delete mode for object removal.
+    *   Ensures proper cleanup when deleting houses (removes associated interior scenes).
     *   Provides getters for placement preview/highlight info.
 *   **`sceneRenderer.ts`**: `SceneRenderer` class.
-    *   Responsible for drawing world-space elements.
-    *   `updateWorldDimensions()`: Method to update internal world size, called by `GameScene.load`.
-    *   `updateCamera()`: Updates camera based on player, viewport, and *current* world dimensions (allows centering smaller scenes).
-    *   Draws terrain, static objects (handles `Tree`, `House`, `DoorExit`), items, player, UI prompts, creative overlays, debug bounds.
+    *   Draws all world-space elements and handles camera management.
+    *   Updates internal world dimensions based on scene data.
+    *   Centers camera based on current world dimensions and viewport.
+    *   Provides visual indicators for creative mode and delete mode (highlights, cursor effects).
 *   **`renderer.ts`**: Core Canvas rendering abstraction.
     *   Holds the canvas context (`ctx`).
     *   Manages viewport size and camera coordinates (`cameraX`, `cameraY`). Updated by `SceneRenderer`.
@@ -111,11 +112,10 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **`item.ts`**: Item definition module (`ItemType`, `Item` interface, `ITEM_CONFIG`, `getItemConfig`).
 *   **`droppedItem.ts`**: Defines the `DroppedItem` interface used by `EntityManager` and `SceneRenderer`.
 *   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. 
-    *   (`DoorExit` config restored but filtered from UI panel). 
-    *   Manages its own state, input handling, drawing. Loads its own assets.
-    *   Includes a "Delete Other Scenes" button that preserves the current scene and any linked interior scenes.
-    *   Implements confirmation dialog pattern with status messages for scene deletion operations.
-    *   Tracks the current scene ID (passed from Game) to know which scene to preserve during deletion.
+    *   Manages selection state, drawing, and input handling. Loads own assets.
+    *   Includes functionality for: object/terrain/item selection, "Delete Objects" mode toggle (exit via ESC/toggle/exiting creative mode), and scene deletion with confirmation dialog.
+    *   Filters `DoorExit` from UI panel while preserving config.
+    *   Tracks current scene ID to preserve during deletion operations.
 *   **`db.ts`**: IndexedDB persistence layer abstraction. 
     *   Provides `saveSceneState`, `loadSceneState`, `deleteSceneState` functions.
     *   Added `getAllSceneIds` function to retrieve all scene IDs from the database.

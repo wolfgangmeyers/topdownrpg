@@ -183,13 +183,20 @@ export class Game {
             this.creativeModeEnabled, 
             this.creativeModeSelector.selectedObjectType, 
             this.creativeModeSelector.selectedTerrainType,
-            this.creativeModeSelector.selectedItemId
+            this.creativeModeSelector.selectedItemId,
+            this.creativeModeSelector.deleteMode
         );
 
         // Check for creative mode toggle
         if (this.inputHandler.toggleCreativeModePressed) {
             this.creativeModeEnabled = !this.creativeModeEnabled;
             console.log(`Creative Mode: ${this.creativeModeEnabled ? 'Enabled' : 'Disabled'}`);
+            
+            // If exiting creative mode, also exit delete mode
+            if (!this.creativeModeEnabled && this.creativeModeSelector.deleteMode) {
+                this.creativeModeSelector.deleteMode = false;
+            }
+            
             // Optional: Reset selection when toggling mode?
             // this.creativeModeSelector.selectedObjectType = 'Tree'; // Or keep last selection
             // this.creativeModeSelector.selectedTerrainType = null;
@@ -334,7 +341,8 @@ export class Game {
             this.creativeModeEnabled, 
             this.creativeModeSelector.selectedObjectType, 
             this.creativeModeSelector.selectedTerrainType,
-            this.creativeModeSelector.selectedItemId
+            this.creativeModeSelector.selectedItemId,
+            this.creativeModeSelector.deleteMode
         );
 
         // --- Draw Inventory UI --- 

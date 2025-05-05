@@ -39,51 +39,71 @@ export class CreativeController {
         private tileSize: number
     ) {}
 
-    update(selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null): void {
+    update(selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null, deleteMode: boolean = false): void {
         const mouseWorldX = this.inputHandler.mousePosition.x;
         const mouseWorldY = this.inputHandler.mousePosition.y;
 
-        // --- Handle Deletion ---
+        // --- Handle Delete Mode (new) ---
+        if (deleteMode && this.inputHandler.mouseClicked) {
+            const objectToRemove = this.entityManager.getObjectAt(mouseWorldX, mouseWorldY);
+            if (objectToRemove) {
+                // Check if it's a House before removing
+                if (objectToRemove instanceof House) {
+                    const house = objectToRemove;
+                    const interiorSceneId = `interior-${house.id}`;
+                    console.log(`Deleting House ID: ${house.id}. Attempting to delete associated scene: ${interiorSceneId}`);
+                    // Asynchronously delete the scene state, don't necessarily wait
+                    deleteSceneState(interiorSceneId).catch(err => {
+                        console.error(`Failed to delete interior scene [${interiorSceneId}] for deleted house:`, err);
+                    });
+                }
+                // Remove the object itself from the current scene
+                this.entityManager.removeStaticObject(objectToRemove);
+                return; // Exit early to prevent placement in the same click
+            }
+        }
+
+        // --- Handle Deletion (via DELETE key - keeping for backward compatibility) ---
         if (this.inputHandler.deletePressed) {
-             const objectToRemove = this.entityManager.getObjectAt(mouseWorldX, mouseWorldY);
-             if (objectToRemove) {
-                 // Check if it's a House before removing
-                 if (objectToRemove instanceof House) {
-                     const house = objectToRemove;
-                     const interiorSceneId = `interior-${house.id}`;
-                     console.log(`Deleting House ID: ${house.id}. Attempting to delete associated scene: ${interiorSceneId}`);
-                     // Asynchronously delete the scene state, don't necessarily wait
-                     deleteSceneState(interiorSceneId).catch(err => {
-                         console.error(`Failed to delete interior scene [${interiorSceneId}] for deleted house:`, err);
-                     });
-                 }
-                 // Remove the object itself from the current scene
-                 this.entityManager.removeStaticObject(objectToRemove);
-             }
-             // Reset flag immediately after processing to prevent multi-delete
-             // (Though resetFrameState also handles this later)
-             // this.inputHandler.deletePressed = false; // Already handled by resetFrameState
+            const objectToRemove = this.entityManager.getObjectAt(mouseWorldX, mouseWorldY);
+            if (objectToRemove) {
+                // Check if it's a House before removing
+                if (objectToRemove instanceof House) {
+                    const house = objectToRemove;
+                    const interiorSceneId = `interior-${house.id}`;
+                    console.log(`Deleting House ID: ${house.id}. Attempting to delete associated scene: ${interiorSceneId}`);
+                    // Asynchronously delete the scene state, don't necessarily wait
+                    deleteSceneState(interiorSceneId).catch(err => {
+                        console.error(`Failed to delete interior scene [${interiorSceneId}] for deleted house:`, err);
+                    });
+                }
+                // Remove the object itself from the current scene
+                this.entityManager.removeStaticObject(objectToRemove);
+            }
+            // Reset flag immediately after processing to prevent multi-delete
+            // (Though resetFrameState also handles this later)
+            // this.inputHandler.deletePressed = false; // Already handled by resetFrameState
         }
 
         // --- Handle Placement ---
-        if (this.inputHandler.mouseClicked) { // InputHandler already handles consumed clicks
-             // Check if clicking on an existing object (prevents placing *on*)
-             const clickedExistingObject = !!this.entityManager.getObjectAt(mouseWorldX, mouseWorldY);
+        if (this.inputHandler.mouseClicked && !deleteMode) { // Skip placement if in delete mode
+            // Check if clicking on an existing object (prevents placing *on*)
+            const clickedExistingObject = !!this.entityManager.getObjectAt(mouseWorldX, mouseWorldY);
 
-             if (!clickedExistingObject) {
-                 // Prioritize placing selected object
-                 if (selectedObjectType) {
-                     this.placeObjectAt(mouseWorldX, mouseWorldY, selectedObjectType);
-                 }
-                 // Otherwise, place terrain
-                 else if (selectedTerrainType) {
-                     this.terrainManager.placeTerrainAt(mouseWorldX, mouseWorldY, selectedTerrainType);
-                 }
-                 // Otherwise, spawn item
-                 else if (selectedItemId) {
-                     this.entityManager.spawnDroppedItem(selectedItemId, mouseWorldX, mouseWorldY, 1);
-                 }
-             }
+            if (!clickedExistingObject) {
+                // Prioritize placing selected object
+                if (selectedObjectType) {
+                    this.placeObjectAt(mouseWorldX, mouseWorldY, selectedObjectType);
+                }
+                // Otherwise, place terrain
+                else if (selectedTerrainType) {
+                    this.terrainManager.placeTerrainAt(mouseWorldX, mouseWorldY, selectedTerrainType);
+                }
+                // Otherwise, spawn item
+                else if (selectedItemId) {
+                    this.entityManager.spawnDroppedItem(selectedItemId, mouseWorldX, mouseWorldY, 1);
+                }
+            }
         }
     }
 

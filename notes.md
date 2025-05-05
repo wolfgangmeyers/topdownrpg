@@ -291,4 +291,16 @@ This file captures key decisions, techniques, and context from the development s
 *   **Future Enhancements:**
     *   Scene browser/visualizer to see all existing scenes.
     *   More granular scene selection for deletion.
-    *   World map generation and visualization tools. 
+    *   World map generation and visualization tools.
+
+## Feature: Delete Mode for Creative Mode (Implemented)
+
+*   **Goal:** Mac-friendly alternative to DELETE key for removing objects in creative mode.
+*   **Implementation:**
+    *   Added toggle button ("Delete Objects"/"Deleting Objects") with visual state indication
+    *   Exit options: button toggle, ESC key, or exiting creative mode
+    *   Visual indicators: red object highlighting on hover, red X cursor
+    *   Maintains DELETE key functionality for backward compatibility
+*   **Improvements:**
+    *   Fixed cursor positioning to handle camera offsets correctly
+    *   Enhanced accessibility while maintaining consistent UX with other creative tools 

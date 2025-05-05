@@ -33,6 +33,7 @@ export class CreativeModeSelector {
     public selectedObjectType: PlaceableObjectType | null = 'Tree'; // Default selection
     public selectedTerrainType: TerrainType | null = null;
     public selectedItemId: string | null = null; // Add state for selected item
+    public deleteMode: boolean = false; // Track if delete mode is active
 
     // Layout constants (previously duplicated in Game and Renderer)
     private readonly panelPadding = 10;
@@ -140,6 +141,12 @@ export class CreativeModeSelector {
 
     // Moved from Game.handleCreativeModeUIClick
     public update(isCreativeModeEnabled: boolean): void {
+        // Check for escape key to exit delete mode
+        if (this.input.escapePressed && this.deleteMode) {
+            this.deleteMode = false;
+            return;
+        }
+
         if (!isCreativeModeEnabled || (!this.input.uiMouseClicked && !this.input.uiDropActionClicked)) {
             // Only process clicks if creative mode is on and a relevant click occurred
             // We ignore drop clicks (Shift+Click) on the creative panel for now.
@@ -151,6 +158,26 @@ export class CreativeModeSelector {
 
         const clickX = this.input.mouseScreenPosition.x;
         const clickY = this.input.mouseScreenPosition.y;
+
+        // Check if delete mode button was clicked
+        const deleteModeButtonBounds = this.getDeleteModeButtonBounds();
+        if (clickX >= deleteModeButtonBounds.x && clickX <= deleteModeButtonBounds.x + deleteModeButtonBounds.width &&
+            clickY >= deleteModeButtonBounds.y && clickY <= deleteModeButtonBounds.y + deleteModeButtonBounds.height) {
+            
+            // Toggle delete mode
+            this.deleteMode = !this.deleteMode;
+            
+            // Clear other selection states when entering delete mode
+            if (this.deleteMode) {
+                this.selectedObjectType = null;
+                this.selectedTerrainType = null;
+                this.selectedItemId = null;
+            }
+            
+            // Prevent this click from also triggering a world click
+            this.input.consumeClick();
+            return;
+        }
 
         // Check if delete button was clicked
         const deleteButtonBounds = this.getDeleteButtonBounds();
@@ -279,15 +306,35 @@ export class CreativeModeSelector {
     }
 
     /**
-     * Gets the position and size of the delete button
+     * Gets the position and size of the delete mode button
      */
+    private getDeleteModeButtonBounds() {
+        // Position the delete mode button below the creative panel and above the delete scenes button
+        const itemGridHeight = Math.ceil(this.items.length / this.itemsPerRow) * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
+        const buttonY = this.panelStartY + itemGridHeight + 10;
+        
+        // Center the button in the panel
+        const panelWidth = this.itemsPerRow * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
+        const buttonWidth = 150;
+        const buttonX = this.panelStartX + (panelWidth - buttonWidth) / 2;
+        
+        return {
+            x: buttonX,
+            y: buttonY,
+            width: buttonWidth,
+            height: 40
+        };
+    }
+
     private getDeleteButtonBounds() {
         // Calculate panel dimensions needed for item slots
         const actualNumRows = Math.ceil(this.items.length / this.itemsPerRow);
         const numRowsToDraw = Math.max(2, actualNumRows); // Ensure at least 2 rows are drawn
         
-        // Position the delete button below the item grid
-        const buttonY = this.panelStartY + numRowsToDraw * (this.panelSlotSize + this.panelPadding) + 10;
+        // Position the delete button below the item grid and delete mode button
+        const itemGridHeight = numRowsToDraw * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
+        const deleteModeButton = this.getDeleteModeButtonBounds();
+        const buttonY = deleteModeButton.y + deleteModeButton.height + 10;
         
         // Center the button in the panel
         const panelWidth = this.itemsPerRow * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
@@ -313,11 +360,13 @@ export class CreativeModeSelector {
         const numRowsToDraw = Math.max(2, actualNumRows); // Ensure at least 2 rows are drawn
         const panelWidth = this.itemsPerRow * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
         
-        // Add extra height for the delete button
+        // Add extra height for both buttons
         const deleteButtonHeight = 40;
-        const deleteButtonMargin = 20; // Space above and below the button
-        const panelHeight = numRowsToDraw * (this.panelSlotSize + this.panelPadding) - this.panelPadding 
-            + deleteButtonHeight + deleteButtonMargin * 2;
+        const deleteModeButtonHeight = 40;
+        const buttonMargin = 10; // Space between elements
+        const totalExtraHeight = (deleteButtonHeight + deleteModeButtonHeight + buttonMargin * 3);
+        
+        const panelHeight = numRowsToDraw * (this.panelSlotSize + this.panelPadding) - this.panelPadding + totalExtraHeight;
 
         ctx.save();
 
@@ -369,6 +418,29 @@ export class CreativeModeSelector {
             ctx.lineWidth = isSelected ? 3 : 1;
             ctx.strokeRect(itemX, itemY, this.panelSlotSize, this.panelSlotSize); 
         }
+
+        // Draw the delete mode button
+        const deleteModeButtonBounds = this.getDeleteModeButtonBounds();
+        
+        // Button background - highlighted when active
+        ctx.fillStyle = this.deleteMode ? 'rgba(50, 120, 255, 0.7)' : 'rgba(70, 70, 200, 0.4)';
+        ctx.fillRect(deleteModeButtonBounds.x, deleteModeButtonBounds.y, deleteModeButtonBounds.width, deleteModeButtonBounds.height);
+        
+        // Button border
+        ctx.strokeStyle = this.deleteMode ? 'rgba(150, 150, 255, 0.9)' : 'rgba(100, 100, 200, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(deleteModeButtonBounds.x, deleteModeButtonBounds.y, deleteModeButtonBounds.width, deleteModeButtonBounds.height);
+        
+        // Button text
+        ctx.fillStyle = 'white';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        const deleteModeText = this.deleteMode ? 'Deleting Objects' : 'Delete Objects';
+        ctx.fillText(deleteModeText, 
+            deleteModeButtonBounds.x + deleteModeButtonBounds.width / 2, 
+            deleteModeButtonBounds.y + deleteModeButtonBounds.height / 2);
 
         // Draw the delete button
         const deleteButtonBounds = this.getDeleteButtonBounds();

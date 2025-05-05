@@ -92,8 +92,8 @@ export abstract class Scene {
     }
 
     abstract load(): Promise<void>;
-    abstract update(deltaTime: number, creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null): void;
-    abstract draw(creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null): void;
+    abstract update(deltaTime: number, creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null, deleteMode?: boolean): void;
+    abstract draw(creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null, deleteMode?: boolean): void;
     abstract save(): Promise<void>; // Add save method requirement
     abstract getWorldDimensions(): { width: number; height: number }; // Add requirement for dimensions
     abstract getTileSize(): number; // Add requirement for tile size
@@ -191,7 +191,8 @@ export class GameScene extends Scene {
             player, 
             this.worldWidth, 
             this.worldHeight, 
-            this.tileSize
+            this.tileSize,
+            inputHandler
         );
     }
 
@@ -317,10 +318,10 @@ export class GameScene extends Scene {
     }
     // --- End Default Layout ---
 
-    update(deltaTime: number, creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null): void {
+    update(deltaTime: number, creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null, deleteMode?: boolean): void {
         // Delegate based on mode
         if (creativeModeEnabled) {
-            this.creativeController.update(selectedObjectType, selectedTerrainType, selectedItemId);
+            this.creativeController.update(selectedObjectType, selectedTerrainType, selectedItemId, deleteMode);
         } else {
             this.gameplayController.update(deltaTime);
         }
@@ -332,10 +333,10 @@ export class GameScene extends Scene {
         this.sceneRenderer.updateCamera();
     }
 
-    draw(creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null): void {
+    draw(creativeModeEnabled: boolean, selectedObjectType: PlaceableObjectType | null, selectedTerrainType: TerrainType | null, selectedItemId: string | null, deleteMode?: boolean): void {
         // Get necessary state for drawing
         const closestPickupItem = creativeModeEnabled ? null : this.gameplayController.getClosestPickupItem();
-        const placementPreview = creativeModeEnabled ? this.creativeController.getPlacementPreviewInfo(selectedObjectType, selectedTerrainType, selectedItemId) : null;
+        const placementPreview = creativeModeEnabled && !deleteMode ? this.creativeController.getPlacementPreviewInfo(selectedObjectType, selectedTerrainType, selectedItemId) : null;
         const highlightObject = creativeModeEnabled ? this.creativeController.getHighlightObjectInfo() : null;
         
         let debugBoundsToShow: DebugBound[] = []; // Initialize empty array
@@ -377,7 +378,8 @@ export class GameScene extends Scene {
             closestPickupItem,
             placementPreview,
             highlightObject,
-            debugBoundsToShow // Pass the calculated or empty bounds
+            debugBoundsToShow, // Pass the calculated or empty bounds
+            deleteMode // Pass delete mode
         );
 
         // Note: Core renderer (for inventory UI) is drawn separately in Game.ts

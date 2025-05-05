@@ -19,7 +19,8 @@ export class InputHandler {
     public dropItemPressed: boolean = false; // Flag for dropping item (G)
     public uiDropActionClicked: boolean = false; // Flag for Shift+Click on UI
     public teleportDebugPressed: boolean = false; // TEMP: Flag for debug teleport
-
+    public escapePressed: boolean = false; // Flag for escape key
+    
     private renderer: Renderer | null = null; // Add renderer reference
 
     constructor() {
@@ -54,6 +55,10 @@ export class InputHandler {
             if (e.key === 'Delete') {
                 this.deletePressed = true;
             }
+            // Check for escape key press
+            if (e.key === 'Escape') {
+                this.escapePressed = true;
+            }
             // Check for creative mode toggle press (using lowercase)
             if (lowerCaseKey === 'c') {
                 this.toggleCreativeModePressed = true;
@@ -87,6 +92,10 @@ export class InputHandler {
             // Reset delete key flag on keyup (using original key)
             if (e.key === 'Delete') {
                 this.deletePressed = false;
+            }
+            // Reset escape key flag on keyup
+            if (e.key === 'Escape') {
+                this.escapePressed = false;
             }
             this.saveKeyPressed = false; // Reset save key flag
             this.loadKeyPressed = false; // Reset load key flag
@@ -170,6 +179,7 @@ export class InputHandler {
         this.dropItemPressed = false; // Reset drop item flag
         this.uiDropActionClicked = false; // Reset UI drop action flag
         this.teleportDebugPressed = false; // Reset debug flag
+        this.escapePressed = false; // Reset escape flag
         // Note: deletePressed is reset on keyup, might need adjustment based on usage
     }
 

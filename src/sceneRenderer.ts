@@ -11,6 +11,7 @@ import { PLACEABLE_OBJECT_CONFIG } from './ui/creativeModeSelector'; // Import o
 import { ItemType } from './item'; // For checking equipped item type
 // Import the interfaces from CreativeController or a shared file
 import { PlacementPreviewInfo, HighlightInfo } from './creativeController';
+import { InputHandler } from './input'; // Import InputHandler
 
 // --- Define structure for GameplayController debug bounds ---
 // Must match the structure used in GameplayController
@@ -35,7 +36,8 @@ export class SceneRenderer {
         private player: Player,
         private worldWidth: number,
         private worldHeight: number,
-        private tileSize: number
+        private tileSize: number,
+        private inputHandler: InputHandler // Add input handler
     ) {}
 
     // Method to update the renderer's knowledge of world dimensions
@@ -73,11 +75,12 @@ export class SceneRenderer {
     }
 
     drawScene(
-        creativeModeEnabled: boolean,
-        closestPickupItem: DroppedItem | null,
-        placementPreview: PlacementPreviewInfo | null,
-        highlightObject: HighlightInfo | null,
-        debugBounds: DebugBound[] = [] // Add optional debugBounds parameter
+        isCreativeModeEnabled: boolean, 
+        closestPickupItem: any = null, 
+        placementPreview: PlacementPreviewInfo | null = null, 
+        highlightObject: HighlightInfo | null = null,
+        debugBounds: DebugBound[] = [],
+        deleteMode: boolean = false
     ): void {
         this.coreRenderer.clear();
         const ctx = this.coreRenderer.getContext();
@@ -88,24 +91,66 @@ export class SceneRenderer {
 
         // --- Draw World Elements ---
         this.drawTerrain();
-        this.drawStaticObjects(creativeModeEnabled);
+        this.drawStaticObjects(isCreativeModeEnabled);
         this.drawDroppedItems();
         this.drawEdgeIndicators();
-        this.drawPickupPrompt(closestPickupItem);
         this.drawPlayer();
-        this.drawEquippedItem(creativeModeEnabled); // Pass flag
+        this.drawEquippedItem(isCreativeModeEnabled); // Pass flag
 
-        // --- Draw Creative Overlay (if enabled) ---
-        if (creativeModeEnabled) {
-            this.drawCreativeModeOverlay(placementPreview, highlightObject);
-            this.drawDebugBounds(debugBounds);
+        // Draw pickup prompt if needed and not in creative mode
+        if (!isCreativeModeEnabled && closestPickupItem) {
+            this.drawPickupPrompt(closestPickupItem);
+        }
+
+        // Draw creative mode overlays if in creative mode
+        if (isCreativeModeEnabled) {
+            // Draw placement preview only if not in delete mode
+            if (placementPreview && !deleteMode) {
+                this.drawPlacementPreview(placementPreview);
+            }
+
+            // Draw object highlight (works in both normal and delete mode)
+            if (highlightObject) {
+                const highlightColor = deleteMode ? 'rgba(255, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.3)';
+                this.coreRenderer.drawHighlight(
+                    highlightObject.x, 
+                    highlightObject.y, 
+                    highlightObject.width, 
+                    highlightObject.height,
+                    highlightColor
+                );
+            }
+            
+            // Draw debug bounds
+            if (debugBounds.length > 0) {
+                this.drawDebugBounds(debugBounds);
+            }
         }
 
         // --- Restore Transform ---
         ctx.restore();
 
         // --- Draw Screen-Space UI (inventory is still handled by coreRenderer/Game) ---
-        // Potentially draw other fixed UI elements here later
+        // Draw cursor in delete mode (in screen space, after context is restored)
+        if (isCreativeModeEnabled && deleteMode) {
+            const mouseX = this.inputHandler.mouseScreenPosition.x;
+            const mouseY = this.inputHandler.mouseScreenPosition.y;
+            
+            ctx.save();
+            
+            // Draw a small red X at cursor position
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
+            ctx.lineWidth = 2;
+            const cursorSize = 12;
+            
+            ctx.beginPath();
+            ctx.moveTo(mouseX - cursorSize/2, mouseY - cursorSize/2);
+            ctx.lineTo(mouseX + cursorSize/2, mouseY + cursorSize/2);
+            ctx.moveTo(mouseX + cursorSize/2, mouseY - cursorSize/2);
+            ctx.lineTo(mouseX - cursorSize/2, mouseY + cursorSize/2);
+            ctx.stroke();
+            ctx.restore();
+        }
     }
 
     private drawTerrain(): void {
@@ -252,20 +297,13 @@ export class SceneRenderer {
         this.coreRenderer.drawImage(itemImg, itemX, itemY, itemWidth, itemHeight, itemRotation);
     }
 
-    private drawCreativeModeOverlay(placementPreview: PlacementPreviewInfo | null, highlightObject: HighlightInfo | null): void {
-        // --- Draw Placement Preview ---
+    private drawPlacementPreview(placementPreview: PlacementPreviewInfo | null): void {
         if (placementPreview) {
             const ghostImg = this.assetLoader.getImage(placementPreview.path);
             if (ghostImg) {
                  // Renderer.drawGhostImage expects 5 args: image, x, y, w, h
                  this.coreRenderer.drawGhostImage(ghostImg, placementPreview.x, placementPreview.y, placementPreview.width, placementPreview.height);
             }
-        }
-
-        // --- Draw Highlight for Removal ---
-        if (highlightObject) {
-             // Renderer.drawHighlight expects 5 args: x, y, w, h, color (optional)
-             this.coreRenderer.drawHighlight(highlightObject.x, highlightObject.y, highlightObject.width, highlightObject.height);
         }
     }
 
