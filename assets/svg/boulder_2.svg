@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 40" width="50" height="40">
+  <rect width="50" height="40" fill="none" /> <!-- Transparent background -->
+
+  <!-- Boulder Body -->
+  <path d="M 40 5 
+           Q 50 20, 40 35 
+           Q 25 45, 10 30 
+           Q 0 15, 15 3 
+           Q 30 0, 40 5 Z" 
+        fill="#9E9E9E"
+        stroke="#616161"
+        stroke-width="1.5" />
+
+  <!-- Texture Pits -->
+  <circle cx="35" cy="12" r="1.5" fill="#757575" opacity="0.8"/>
+  <circle cx="15" cy="25" r="1.8" fill="#757575" opacity="0.8"/>
+  <circle cx="30" cy="30" r="1.2" fill="#757575" opacity="0.8"/>
+
+  <!-- Iron Ore Veins -->
+  <path d="M 20 10 q 5 2, 8 8 q -2 3, -6 2 q -3 -4, -2 -10 Z"
+        fill="#607D8B"
+        stroke="#455A64"
+        stroke-width="0.5"
+        opacity="0.7" />
+  <path d="M 30 20 q 3 6, -2 8 q -5 1, -7 -4 q 1 -5, 6 -4 Z"
+        fill="#607D8B"
+        stroke="#455A64"
+        stroke-width="0.5"
+        opacity="0.7" />
+
+</svg> 

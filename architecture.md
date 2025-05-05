@@ -114,6 +114,7 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. 
     *   Manages selection state, drawing, and input handling. Loads own assets.
     *   Includes functionality for: object/terrain/item selection, "Delete Objects" mode toggle (exit via ESC/toggle/exiting creative mode), and scene deletion with confirmation dialog.
+    *   Added biome regeneration functionality that allows regenerating the current scene with a new procedurally generated layout.
     *   Filters `DoorExit` from UI panel while preserving config.
     *   Tracks current scene ID to preserve during deletion operations.
 *   **`db.ts`**: IndexedDB persistence layer abstraction. 
@@ -147,7 +148,7 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **Manager Pattern:** Used for `EntityManager`, `TerrainManager`, `SceneStateManager`.
 *   **Controller Pattern:** Used for `GameplayController`, `CreativeController`.
 *   **System Pattern:** Used for `SceneTransitionSystem` to encapsulate related functionality.
-*   **Scene Management:** `Game` manages `currentScene` instance and `currentSceneId`. Transitions handled by `Game.changeScene`, loading/saving delegated to `Scene`/`SceneStateManager`. Default scene generation for non-existent scene IDs (including interiors).
+*   **Scene Management:** `Game` manages `currentScene` instance and `currentSceneId`. Transitions handled by `Game.changeScene`, loading/saving delegated to `Scene`/`SceneStateManager`. Default scene generation for non-existent scene IDs (including interiors). **Scene regeneration** allows refreshing an existing scene with a new procedurally generated layout while maintaining scene ID and properly handling interior scenes.
 *   **Decoupled Rendering:** Core `Renderer`, Scene-specific `SceneRenderer`. `SceneRenderer` dimensions updated dynamically.
 *   **Decoupled Audio:** `AudioPlayer` hides Web Audio API details.
 *   **World vs. Screen Coordinates:** Handled by camera translation (`SceneRenderer`) and UI drawing.
@@ -162,6 +163,10 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **Delayed Actions:** Using `setTimeout` for tree destruction effects.
 *   **UI Interaction Handling:** UI components handle clicks, consume events.
 *   **Debug Visuals:** Creative mode can display debug bounds.
+*   **Scene Integrity:**
+    *   The system intelligently preserves related scenes via the "Delete Other Scenes" utility.
+    *   During scene regeneration, interior scenes linked to houses are properly deleted to prevent orphaned data.
+    *   Houses are regenerated with new unique IDs, creating fresh interiors when entered.
 
 ## 5. Additional Notes
 

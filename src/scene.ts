@@ -423,6 +423,55 @@ export class GameScene extends Scene {
     }
     // --- End Adjacent Scene Methods ---
 
+    /**
+     * Regenerates the current scene, clearing all objects and terrain
+     * and generating a new layout using the BiomeManager.
+     * @returns {Promise<boolean>} A promise that resolves to true if regeneration was successful.
+     */
+    public async regenerateScene(): Promise<boolean> {
+        try {
+            console.log(`Regenerating scene [${this.sceneId}]...`);
+            
+            if (this.sceneId.startsWith('interior-')) {
+                console.log(`Cannot regenerate interior scene: ${this.sceneId}`);
+                return false;
+            }
+            
+            // 1. First clear all objects and items
+            this.entityManager.clearAll();
+            
+            // 2. Clear current terrain
+            const dims = this.getWorldDimensions();
+            
+            // 3. Regenerate the scene using the BiomeManager
+            if (this.sceneId.startsWith('world-')) {
+                // For world grid scenes, use BiomeManager
+                this.biomeManager.generateBiome(
+                    BiomeType.SPARSE_FOREST,
+                    null,
+                    (direction, linkedSceneId) => this.setAdjacentSceneId(direction, linkedSceneId)
+                );
+            } else {
+                // For other scenes, also use BiomeManager with sparse forest
+                this.biomeManager.generateBiome(
+                    BiomeType.SPARSE_FOREST,
+                    null,
+                    (direction, linkedSceneId) => this.setAdjacentSceneId(direction, linkedSceneId)
+                );
+            }
+            
+            // 4. Update the camera dimensions
+            const newDimensions = this.getWorldDimensions();
+            this.sceneRenderer.updateWorldDimensions(newDimensions.width, newDimensions.height);
+            
+            console.log(`Scene [${this.sceneId}] regenerated successfully.`);
+            return true;
+        } catch (error) {
+            console.error(`Error regenerating scene [${this.sceneId}]:`, error);
+            return false;
+        }
+    }
+
     // --- REMOVED METHODS (moved to other classes) ---
     // All private methods related to drawing, input handling, state management, etc., are now removed.
 } 

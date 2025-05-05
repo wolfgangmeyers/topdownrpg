@@ -10,6 +10,8 @@ import { ITEM_CONFIG, Item } from './item';
 import { TerrainType } from './terrain';
 // Import the new selector and its types
 import { CreativeModeSelector, PlaceableObjectType } from './ui/creativeModeSelector'; 
+// Import database functions for scene regeneration
+import { loadSceneState, saveSceneState, deleteSceneState } from './db';
 
 // --- Player Save Data --- 
 const PLAYER_SAVE_KEY = 'topdown_playerSave';
@@ -176,6 +178,13 @@ export class Game {
 
         // Update the creative mode selector first (handles its own input)
         this.creativeModeSelector.update(this.creativeModeEnabled);
+        
+        // Handle scene regeneration if requested
+        if (this.creativeModeSelector.regenerateCurrentScene && this.currentScene instanceof GameScene) {
+            console.log("Game: Handling scene regeneration request");
+            this.handleSceneRegeneration();
+            return; // Exit update cycle to prevent further processing during regeneration
+        }
 
         // Delegate update to the current scene - pass selection state from the selector
         this.currentScene.update(
@@ -531,6 +540,86 @@ export class Game {
                     this.player.equipItem(axeId);
                 }
             }
+        }
+    }
+
+    /**
+     * Handles the regeneration of the current scene.
+     * This includes cleaning up any existing scene data, regenerating the scene,
+     * and handling associated interior scenes for any houses.
+     */
+    private async handleSceneRegeneration(): Promise<void> {
+        if (!this.currentScene || !(this.currentScene instanceof GameScene)) {
+            this.creativeModeSelector.setRegenerationComplete(false, "Error: No valid scene to regenerate");
+            return;
+        }
+        
+        // Set loading state to prevent UI interactions
+        this.isLoading = true;
+        
+        try {
+            // 1. Load the current scene state to identify houses
+            const sceneState = await loadSceneState(this.currentSceneId);
+            const linkedInteriors: string[] = [];
+            
+            // 2. Identify interior scenes linked to houses in this scene
+            if (sceneState && sceneState.objects) {
+                sceneState.objects.forEach((obj: { type: string; id?: string }) => {
+                    if (obj.type === 'House' && obj.id) {
+                        const interiorSceneId = `interior-${obj.id}`;
+                        linkedInteriors.push(interiorSceneId);
+                        console.log(`Found linked interior: ${interiorSceneId}`);
+                    }
+                });
+            }
+            
+            // 3. Delete all linked interior scenes
+            for (const interiorId of linkedInteriors) {
+                try {
+                    // First clean the interior (remove all objects)
+                    const interiorState = await loadSceneState(interiorId);
+                    if (interiorState) {
+                        const cleanedState = {
+                            ...interiorState,
+                            objects: [],
+                            droppedItems: []
+                        };
+                        await saveSceneState(interiorId, cleanedState);
+                    }
+                    
+                    // Then delete it
+                    await deleteSceneState(interiorId);
+                    console.log(`Deleted interior scene: ${interiorId}`);
+                } catch (error) {
+                    console.error(`Error deleting interior scene ${interiorId}:`, error);
+                }
+            }
+            
+            // 4. Regenerate the current scene
+            const success = await this.currentScene.regenerateScene();
+            
+            // 5. Save the regenerated scene
+            await this.currentScene.save();
+            
+            // 6. Reset player position to scene center
+            if (this.player) {
+                const dimensions = this.currentScene.getWorldDimensions();
+                this.player.x = dimensions.width / 2;
+                this.player.y = dimensions.height / 2;
+            }
+            
+            // 7. Complete regeneration
+            const message = success 
+                ? `Scene regenerated (${linkedInteriors.length} interiors removed)`
+                : "Error during scene regeneration";
+            
+            this.creativeModeSelector.setRegenerationComplete(success, message);
+        } catch (error) {
+            console.error("Error during scene regeneration:", error);
+            this.creativeModeSelector.setRegenerationComplete(false, "Error during regeneration");
+        } finally {
+            // Reset loading state
+            this.isLoading = false;
         }
     }
 } 

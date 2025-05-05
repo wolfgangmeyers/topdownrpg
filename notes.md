@@ -304,3 +304,35 @@ This file captures key decisions, techniques, and context from the development s
 *   **Improvements:**
     *   Fixed cursor positioning to handle camera offsets correctly
     *   Enhanced accessibility while maintaining consistent UX with other creative tools 
+
+## Feature: Biome Regeneration (Implemented)
+
+*   **Goal:** Allow users to regenerate the current scene with a fresh procedurally generated layout while preserving scene identity and handling linked interior scenes properly.
+*   **Implementation:**
+    *   Added UI Component:
+        *   "Regenerate Current Scene" button in Creative Mode with green color scheme
+        *   Two-step confirmation pattern to prevent accidental regeneration
+        *   Clear visual feedback with status messages during and after the operation
+    *   Scene Regeneration Logic:
+        *   `regenerateScene()` method added to `GameScene` that uses `BiomeManager` to create a new layout
+        *   Properly clears existing entities and terrain before regeneration
+        *   Updates camera and world dimensions to match the new layout
+    *   Interior Scene Handling:
+        *   Before regeneration, identifies all houses in the current scene
+        *   Finds all linked interior scenes (`interior-{houseId}`)
+        *   Cleans and properly deletes these interior scenes to prevent orphaned data
+        *   Houses created during regeneration will have new unique IDs, creating fresh interiors when entered
+    *   Player Positioning:
+        *   Automatically resets player to the center of the regenerated scene
+*   **Implementation Details:**
+    *   Integrated with existing component architecture:
+        *   UI state (`isConfirmingRegenerate`, `isRegenerating`) managed in `CreativeModeSelector`
+        *   Scene regeneration logic encapsulated in `GameScene.regenerateScene()`
+        *   Database operations for interior scene handling in `Game.handleSceneRegeneration()`
+    *   Followed existing UI patterns with color-coded buttons and confirmation flow
+    *   Gracefully handles loading states to prevent UI interactions during regeneration
+*   **Benefits:**
+    *   Allows quick experimentation with different procedurally-generated layouts
+    *   Maintains proper scene relationships in the game world
+    *   Follows the established pattern of data integrity with linked scenes
+    *   Provides a convenient way to refresh a scene without manual deletion and recreation 

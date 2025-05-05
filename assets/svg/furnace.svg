@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <defs>
+    <!-- Radial gradient for fire effect -->
+    <radialGradient id="fireGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" style="stop-color:#FFEB3B; stop-opacity:1" /> <!-- Yellow center -->
+      <stop offset="50%" style="stop-color:#FF9800; stop-opacity:0.9" /> <!-- Orange mid -->
+      <stop offset="100%" style="stop-color:#F44336; stop-opacity:0.8" /> <!-- Red edge -->
+    </radialGradient>
+  </defs>
+  
+  <rect width="40" height="40" fill="none" /> <!-- Transparent background -->
+
+  <!-- Furnace Base (Dark Stone/Metal) -->
+  <rect x="5" y="5" width="30" height="30" rx="3" ry="3" 
+        fill="#455A64"
+        stroke="#263238"
+        stroke-width="1.5" />
+
+  <!-- Furnace Opening -->
+  <rect x="12.5" y="12.5" width="15" height="15" rx="2" ry="2" 
+        fill="url(#fireGradient)" /> 
+        
+  <!-- Optional: Darker border around opening -->
+   <rect x="12.5" y="12.5" width="15" height="15" rx="2" ry="2" 
+        fill="none" 
+        stroke="#212121" 
+        stroke-width="1"
+        opacity="0.5"/>
+
+</svg> 

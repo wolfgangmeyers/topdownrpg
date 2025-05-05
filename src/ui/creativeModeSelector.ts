@@ -48,6 +48,15 @@ export class CreativeModeSelector {
     private deletionResult: string | null = null;
     private resultTimeoutId: number | null = null;
 
+    // Add biome regenerate button state
+    private isConfirmingRegenerate = false;
+    private isRegenerating = false;
+    private regenerationResult: string | null = null;
+    private regenerationTimeoutId: number | null = null;
+    
+    // Add signal for game to regenerate the current scene
+    public regenerateCurrentScene = false;
+
     constructor(
         renderer: Renderer, 
         input: InputHandler, 
@@ -231,6 +240,47 @@ export class CreativeModeSelector {
             return;
         }
 
+        // Check if regenerate button was clicked
+        const regenerateButtonBounds = this.getRegenerateButtonBounds();
+        if (clickX >= regenerateButtonBounds.x && clickX <= regenerateButtonBounds.x + regenerateButtonBounds.width &&
+            clickY >= regenerateButtonBounds.y && clickY <= regenerateButtonBounds.y + regenerateButtonBounds.height) {
+            
+            // If we're not already in confirmation mode, show confirmation prompt
+            if (!this.isConfirmingRegenerate) {
+                this.isConfirmingRegenerate = true;
+                // Prevent this click from also triggering a world click
+                this.input.consumeClick();
+                return;
+            }
+            
+            // If we are in confirmation mode, proceed with regeneration
+            this.isConfirmingRegenerate = false;
+            this.isRegenerating = true;
+            
+            // Set the flag for Game to handle the regeneration
+            this.regenerateCurrentScene = true;
+            
+            // Clear any existing timeout
+            if (this.regenerationTimeoutId !== null) {
+                window.clearTimeout(this.regenerationTimeoutId);
+            }
+            
+            // Set a timeout to clear the result message after 5 seconds
+            this.regenerationTimeoutId = window.setTimeout(() => {
+                this.regenerationResult = null;
+                this.regenerationTimeoutId = null;
+            }, 5000);
+            
+            // Prevent this click from also triggering a world click
+            this.input.consumeClick();
+            return;
+        } else if (this.isConfirmingRegenerate) {
+            // If we clicked anywhere else while in confirmation mode, cancel it
+            this.isConfirmingRegenerate = false;
+            this.input.consumeClick();
+            return;
+        }
+
         // Handle regular item selection (existing code)
         let clickedItem: CreativeModeItem | null = null;
         for (let i = 0; i < this.items.length; i++) {
@@ -309,9 +359,9 @@ export class CreativeModeSelector {
      * Gets the position and size of the delete mode button
      */
     private getDeleteModeButtonBounds() {
-        // Position the delete mode button below the creative panel and above the delete scenes button
-        const itemGridHeight = Math.ceil(this.items.length / this.itemsPerRow) * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
-        const buttonY = this.panelStartY + itemGridHeight + 10;
+        // Position below the regenerate button
+        const regenerateButton = this.getRegenerateButtonBounds();
+        const buttonY = regenerateButton.y + regenerateButton.height + 10;
         
         // Center the button in the panel
         const panelWidth = this.itemsPerRow * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
@@ -349,6 +399,27 @@ export class CreativeModeSelector {
         };
     }
 
+    /**
+     * Gets the position and size of the regenerate button
+     */
+    private getRegenerateButtonBounds() {
+        // Position the regenerate button below the creative panel
+        const itemGridHeight = Math.ceil(this.items.length / this.itemsPerRow) * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
+        const buttonY = this.panelStartY + itemGridHeight + 10;
+        
+        // Center the button in the panel
+        const panelWidth = this.itemsPerRow * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
+        const buttonWidth = 200;
+        const buttonX = this.panelStartX + (panelWidth - buttonWidth) / 2;
+        
+        return {
+            x: buttonX,
+            y: buttonY,
+            width: buttonWidth,
+            height: 40
+        };
+    }
+
     // Moved from Renderer.drawCreativePanel
     public draw(isCreativeModeEnabled: boolean): void {
         if (!isCreativeModeEnabled) return;
@@ -360,11 +431,12 @@ export class CreativeModeSelector {
         const numRowsToDraw = Math.max(2, actualNumRows); // Ensure at least 2 rows are drawn
         const panelWidth = this.itemsPerRow * (this.panelSlotSize + this.panelPadding) - this.panelPadding;
         
-        // Add extra height for both buttons
+        // Add extra height for all three buttons
         const deleteButtonHeight = 40;
         const deleteModeButtonHeight = 40;
+        const regenerateButtonHeight = 40;
         const buttonMargin = 10; // Space between elements
-        const totalExtraHeight = (deleteButtonHeight + deleteModeButtonHeight + buttonMargin * 3);
+        const totalExtraHeight = (deleteButtonHeight + deleteModeButtonHeight + regenerateButtonHeight + buttonMargin * 4);
         
         const panelHeight = numRowsToDraw * (this.panelSlotSize + this.panelPadding) - this.panelPadding + totalExtraHeight;
 
@@ -481,6 +553,65 @@ export class CreativeModeSelector {
                 deleteButtonBounds.y + deleteButtonBounds.height / 2);
         }
 
+        // Draw the regenerate button
+        const regenerateButtonBounds = this.getRegenerateButtonBounds();
+        
+        // Button background
+        ctx.fillStyle = this.isConfirmingRegenerate ? 'rgba(50, 200, 50, 0.6)' : 'rgba(50, 150, 50, 0.4)';
+        if (this.isRegenerating) {
+            ctx.fillStyle = 'rgba(100, 100, 100, 0.6)'; // Disabled/processing appearance
+        }
+        ctx.fillRect(regenerateButtonBounds.x, regenerateButtonBounds.y, regenerateButtonBounds.width, regenerateButtonBounds.height);
+        
+        // Button border
+        ctx.strokeStyle = this.isConfirmingRegenerate ? 'rgba(100, 255, 100, 0.8)' : 'rgba(100, 200, 100, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(regenerateButtonBounds.x, regenerateButtonBounds.y, regenerateButtonBounds.width, regenerateButtonBounds.height);
+        
+        // Button text
+        ctx.fillStyle = 'white';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        if (this.isRegenerating) {
+            ctx.fillText('Regenerating scene...', 
+                regenerateButtonBounds.x + regenerateButtonBounds.width / 2, 
+                regenerateButtonBounds.y + regenerateButtonBounds.height / 2);
+        } else if (this.isConfirmingRegenerate) {
+            ctx.fillText('Confirm: Regenerate Scene?', 
+                regenerateButtonBounds.x + regenerateButtonBounds.width / 2, 
+                regenerateButtonBounds.y + regenerateButtonBounds.height / 2);
+        } else if (this.regenerationResult) {
+            ctx.fillText(this.regenerationResult, 
+                regenerateButtonBounds.x + regenerateButtonBounds.width / 2, 
+                regenerateButtonBounds.y + regenerateButtonBounds.height / 2);
+        } else {
+            ctx.fillText('Regenerate Current Scene', 
+                regenerateButtonBounds.x + regenerateButtonBounds.width / 2, 
+                regenerateButtonBounds.y + regenerateButtonBounds.height / 2);
+        }
+
         ctx.restore();
+    }
+
+    /**
+     * Resets the regeneration state and sets the result message
+     */
+    public setRegenerationComplete(success: boolean, message: string): void {
+        this.isRegenerating = false;
+        this.regenerateCurrentScene = false;
+        this.regenerationResult = message;
+        
+        // Clear any existing timeout
+        if (this.regenerationTimeoutId !== null) {
+            window.clearTimeout(this.regenerationTimeoutId);
+        }
+        
+        // Set a timeout to clear the result message after 5 seconds
+        this.regenerationTimeoutId = window.setTimeout(() => {
+            this.regenerationResult = null;
+            this.regenerationTimeoutId = null;
+        }, 5000);
     }
 } 

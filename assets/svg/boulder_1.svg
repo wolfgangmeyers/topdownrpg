@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 45" width="50" height="45">
+  <rect width="50" height="45" fill="none" /> <!-- Transparent background -->
+
+  <!-- Boulder Body -->
+  <path d="M 45 20 
+           Q 50 35, 35 40 
+           Q 20 45, 10 35 
+           Q 0 20, 15 5 
+           Q 35 0, 45 20 Z" 
+        fill="#9E9E9E"
+        stroke="#616161"
+        stroke-width="1.5" />
+
+  <!-- Texture Pits -->
+  <circle cx="38" cy="18" r="1.8" fill="#757575" opacity="0.8"/>
+  <circle cx="35" cy="30" r="2" fill="#757575" opacity="0.8"/>
+  <circle cx="18" cy="32" r="1.5" fill="#757575" opacity="0.8"/>
+  <circle cx="20" cy="15" r="1.2" fill="#757575" opacity="0.8"/>
+
+</svg> 
