@@ -150,7 +150,7 @@ export class SceneTransitionSystem {
                 // Calculate door bounds
                 const doorWidth = house.width / 4;
                 const doorTopMargin = 15; 
-                const doorBottomMargin = 60; 
+                const doorBottomMargin = 20;
                 const doorXOffset = 0; 
                 const houseBottomY = house.y + house.height / 2;
                 const doorTopY = houseBottomY - doorTopMargin;
@@ -175,10 +175,7 @@ export class SceneTransitionSystem {
                     
                     const interiorSceneId = `interior-${house.id}`;
                     const originSceneId = this.game.getCurrentSceneId();
-                    const exitTargetPosition = { 
-                        x: playerCenterX, 
-                        y: playerCenterY + 40 // Position slightly below entry
-                    };
+                    const exitTargetPosition = { x: playerCenterX, y: house.y + house.height + 15 };
                     
                     console.log(`Player entered door of House ID: ${house.id}. Triggering scene change to [${interiorSceneId}]...`);
                     
