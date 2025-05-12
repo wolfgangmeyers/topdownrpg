@@ -29,6 +29,10 @@ export interface BiomeConfig {
     // Center padding (empty space around the center)
     centerPadding: number;
     
+    // Densities for other resources
+    roundStoneDensity?: number; // Number of round stones to generate
+    triangularStoneDensity?: number; // Number of triangular stones to generate
+    
     // Secondary terrain features
     secondaryTerrainType?: TerrainType; // Type of secondary terrain (water, road, etc.)
     secondaryTerrainChance?: number; // Chance (0-1) of a tile being secondary terrain
@@ -51,6 +55,8 @@ export const BIOME_CONFIG: Record<BiomeType, BiomeConfig> = {
         treeSpacing: 50,
         centerPadding: 150,
         // No secondary terrain in basic sparse forest
+        roundStoneDensity: 1, // Fewer round stones
+        triangularStoneDensity: 1, // Fewer sharp stones
     },
     /* 
     // Example of future biome types:
@@ -248,24 +254,67 @@ export class BiomeManager {
      */
     private populateBiomeEntities(biomeType: BiomeType): void {
         const config = BIOME_CONFIG[biomeType];
-        
-        // For now, our main entity type is trees
+
+        // Populate Trees
         this.entityManager.populateTrees(
             config.treeDensity,
             this.worldWidth,
             this.worldHeight
         );
-        
+
+        // Populate Round Stones
+        const roundStoneCount = config.roundStoneDensity || 0;
+        for (let i = 0; i < roundStoneCount; i++) {
+            this.spawnRandomItem('stone_round', 1);
+        }
+
+        // Populate Triangular Stones
+        const triangularStoneCount = config.triangularStoneDensity || 0;
+        for (let i = 0; i < triangularStoneCount; i++) {
+            this.spawnRandomItem('stone_triangular', 1);
+        }
+
         // Future: Add more complex entity population logic
         // For example:
-        // if (config.rockDensity) {
+        // if (config.rockDensity) { // Note: This was for static rocks, now handled above as items
         //     this.populateRocks(config.rockDensity);
         // }
         // if (config.houseChance && Math.random() < config.houseChance) {
         //     this.placeRandomHouse();
         // }
     }
-    
+
+    /**
+     * Helper method to spawn a specific item at a random walkable location.
+     * @param itemId The ID of the item to spawn.
+     * @param quantity The quantity of the item to spawn.
+     */
+    private spawnRandomItem(itemId: string, quantity: number): void {
+        let attempts = 0;
+        const maxAttempts = 50; // Prevent infinite loops if no space is found
+
+        while (attempts < maxAttempts) {
+            const x = Math.random() * this.worldWidth;
+            const y = Math.random() * this.worldHeight;
+
+            // Convert to grid coordinates for walkability check
+            const gridX = Math.floor(x / this.tileSize);
+            const gridY = Math.floor(y / this.tileSize);
+
+            // Check if the location is walkable
+            if (this.terrainManager.isWalkable(gridX, gridY)) {
+                // Check if the location is reasonably clear of existing static objects
+                // (Optional: Add a small radius check against entityManager.getObjectAt if needed)
+                if (!this.entityManager.getObjectAt(x, y)) { // Check only the exact point
+                    this.entityManager.spawnDroppedItem(itemId, x, y, quantity);
+                    return; // Successfully spawned
+                }
+            }
+            attempts++;
+        }
+        console.warn(`Could not find a suitable location for item ${itemId} after ${maxAttempts} attempts.`);
+    }
+
     /**
      * How to add a new biome type:
      * 1. Add a new entry to the BiomeType enum

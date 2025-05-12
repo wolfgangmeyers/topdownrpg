@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
   <rect width="40" height="40" fill="none" /> <!-- Transparent background -->
 
-  <!-- Stone Body -->
-  <path d="M 20 5 L 5 35 L 35 35 Z" 
+  <!-- Stone Body (slightly uneven) -->
+  <!-- Added an extra point along the base to break the symmetry -->
+  <path d="M 20 5 L 6 34 L 18 30 L 36 35 Z" 
         fill="#9E9E9E"
         stroke="#616161"
         stroke-width="1.5" 

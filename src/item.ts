@@ -48,6 +48,26 @@ export const ITEM_CONFIG: { [key: string]: Item } = {
         maxStackSize: 50,
         equipable: false,
     },
+    'stone_round': {
+        id: 'stone_round',
+        name: 'Round Stone',
+        description: 'A smooth, round stone.',
+        assetPath: '/assets/svg/stone_round.svg',
+        itemType: ItemType.RESOURCE,
+        stackable: true,
+        maxStackSize: 50,
+        equipable: false,
+    },
+    'stone_triangular': {
+        id: 'stone_triangular',
+        name: 'Sharp Stone',
+        description: 'A stone with a sharp edge.',
+        assetPath: '/assets/svg/stone_triangular.svg',
+        itemType: ItemType.RESOURCE,
+        stackable: true,
+        maxStackSize: 50,
+        equipable: false,
+    },
     // Add more items here as needed
 };
 

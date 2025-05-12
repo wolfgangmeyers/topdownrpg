@@ -91,10 +91,48 @@ export class SceneTransitionSystem {
         // If not at an edge, return
         if (!direction) return;
 
-        // Parse current scene coordinates
-        const [scenePrefix, sceneXStr, sceneYStr] = this.game.getCurrentSceneId().split('-');
-        let sceneX = parseInt(sceneXStr) || 0;
-        let sceneY = parseInt(sceneYStr) || 0;
+        const currentSceneId = this.game.getCurrentSceneId();
+        let sceneX = 0;
+        let sceneY = 0;
+        let parsedSuccessfully = false;
+
+        // Try parsing new format: world_X_Y (e.g., world_0_0, world_-1_0)
+        if (currentSceneId.startsWith("world_")) {
+            const parts = currentSceneId.substring("world_".length).split('_');
+            if (parts.length === 2) {
+                const xVal = parseInt(parts[0]);
+                const yVal = parseInt(parts[1]);
+                if (!isNaN(xVal) && !isNaN(yVal)) {
+                    sceneX = xVal;
+                    sceneY = yVal;
+                    parsedSuccessfully = true;
+                }
+            }
+        }
+
+        // If new format parsing failed or wasn't applicable, try parsing old format: world-X-Y (e.g., world-0-0, world--1-0)
+        if (!parsedSuccessfully && currentSceneId.startsWith("world-")) {
+            const oldFormatRegex = /^world-(-?\d+)-(-?\d+)$/;
+            const match = currentSceneId.match(oldFormatRegex);
+            if (match && match.length === 3) {
+                const xVal = parseInt(match[1]);
+                const yVal = parseInt(match[2]);
+                if (!isNaN(xVal) && !isNaN(yVal)) {
+                    sceneX = xVal;
+                    sceneY = yVal;
+                    parsedSuccessfully = true;
+                }
+            }
+        }
+
+        if (!parsedSuccessfully) {
+            // Fallback for initial scene like "defaultForest" or if parsing completely fails
+            // For "world-0-0" (old format but positive), regex should handle it.
+            // If currentSceneId is something like "defaultForest" (no longer used for dynamic scenes) or truly unparseable
+            console.warn(`Could not parse scene coordinates from ID: ${currentSceneId}. Defaulting to 0,0 for coordinate calculation purposes.`);
+            sceneX = 0; 
+            sceneY = 0; 
+        }
         
         // Calculate new scene coordinates based on direction
         switch(direction) {
@@ -104,8 +142,8 @@ export class SceneTransitionSystem {
             case Direction.WEST: sceneX--; break;
         }
         
-        // Create the new scene ID using grid coordinates
-        const newSceneId = `world-${sceneX}-${sceneY}`;
+        // Create the new scene ID using grid coordinates with UNDERSCORE separator
+        const newSceneId = `world_${sceneX}_${sceneY}`;
 
         // Get adjacent scene ID 
         let adjacentSceneId = currentScene.getAdjacentSceneId(direction.toLowerCase() as 'north' | 'east' | 'south' | 'west');
