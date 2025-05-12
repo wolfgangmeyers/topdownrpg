@@ -11,7 +11,10 @@ import { TerrainType } from './terrain';
 // Import the new selector and its types
 import { CreativeModeSelector, PlaceableObjectType } from './ui/creativeModeSelector'; 
 // Import database functions for scene regeneration
-import { loadSceneState, saveSceneState, deleteSceneState } from './db';
+import { deleteSceneState, loadSceneState, saveSceneState } from './db';
+import { CraftingManager } from './crafting/craftingManager'; // Import CraftingManager
+import { EntityManager } from './entityManager'; // Import EntityManager
+import { CraftingUI } from './ui/craftingUI'; // Import CraftingUI
 
 // --- Player Save Data --- 
 const PLAYER_SAVE_KEY = 'topdown_playerSave';
@@ -38,8 +41,11 @@ export class Game {
     private currentSceneId: string = 'world-0-0'; // Track current scene ID, default is now world-0-0 instead of defaultForest
     private audioPlayer: AudioPlayer; // Add AudioPlayer instance
     private creativeModeSelector: CreativeModeSelector; // Add the selector instance
+    private craftingManager: CraftingManager | null = null; // Add CraftingManager instance
+    private craftingUI: CraftingUI | null = null; // Add CraftingUI instance
     private isLoading: boolean = true; // Flag to check if initial loading is done
     public creativeModeEnabled: boolean = false; // Keep this global flag
+    private playerIsCrafting: boolean = false; // State to track if player is actively crafting
 
     // private npcs: NPC[] = []; // Keep track of NPCs later
     private lastTimestamp: number = 0;
@@ -102,7 +108,7 @@ export class Game {
             
             this.player = new Player(0, 0, playerWidth, playerHeight, playerSvgPath);
             
-            // Restore save data if it exists
+            // Restore save data if it exists (before scene creation)
             await this.restorePlayerState();
             
             // Create initial scene, using the loaded scene ID
@@ -111,11 +117,22 @@ export class Game {
             // Load the scene async (asset loading, state retrieval, etc)
             await this.currentScene.load();
             
+            // Now that the scene and its EntityManager are ready, initialize the CraftingManager
+            this.craftingManager = new CraftingManager(this.player, this.getEntityManagerOrFail(), this);
+            
+            // Initialize CraftingUI now that its dependencies are ready
+            this.craftingUI = new CraftingUI(this.renderer, this.inputHandler, this.assetLoader, this.craftingManager, this.player);
+            
             // Set player to scene center initially
             // (better to set explicitly than trust the save data, as scene could have changed)
             const dimensions = this.currentScene.getWorldDimensions();
-            this.player.x = dimensions.width / 2;
-            this.player.y = dimensions.height / 2;
+            if (savedPlayerData && savedPlayerData.position && this.currentSceneId === savedPlayerData.currentSceneId) {
+                 this.player.x = savedPlayerData.position.x;
+                 this.player.y = savedPlayerData.position.y;
+            } else {
+                this.player.x = dimensions.width / 2;
+                this.player.y = dimensions.height / 2;
+            }
             
             // Start game loop once initialization is complete
             this.lastTimestamp = performance.now();
@@ -171,74 +188,105 @@ export class Game {
              requestAnimationFrame(this.update.bind(this)); 
              return; 
         }
-        if (!this.currentScene || !this.player) return; // Add player check
+        if (!this.currentScene || !this.player || !this.craftingManager || !this.craftingUI) return;
 
         const deltaTime = (timestamp - (this.lastTimestamp || timestamp)) / 1000; // Delta time in seconds
+        const deltaMs = deltaTime * 1000; // Delta time in milliseconds
         this.lastTimestamp = timestamp;
 
-        // Update the creative mode selector first (handles its own input)
-        this.creativeModeSelector.update(this.creativeModeEnabled);
+        // --- Input Handling Priority --- 
+        // 1. Check for Escape key: Close Crafting UI if open, otherwise cancel crafting task
+        if (this.inputHandler.escapePressed) {
+            if (this.craftingUI.getIsOpen()) {
+                this.craftingUI.toggle(); // Close Crafting UI
+            } else if (this.craftingManager.isCrafting()) {
+                this.craftingManager.cancelCurrentTask(); // Cancel active craft
+            }
+            this.inputHandler.escapePressed = false; // Consume escape press
+        }
         
-        // Handle scene regeneration if requested
-        if (this.creativeModeSelector.regenerateCurrentScene && this.currentScene instanceof GameScene) {
-            console.log("Game: Handling scene regeneration request");
-            this.handleSceneRegeneration();
-            return; // Exit update cycle to prevent further processing during regeneration
+        // 2. Update Crafting UI if it's open (it handles its own input consumption)
+        if (this.craftingUI.getIsOpen()) {
+            this.craftingUI.update();
+            // Prevent other game interactions while Crafting UI is open
+             this.inputHandler.resetFrameState(); // Reset flags like mouse clicks used by UI
+             requestAnimationFrame(this.update.bind(this)); // Need to continue the loop for UI responsiveness
+             return; // Skip the rest of the game update logic
+        }
+        
+        // --- Gameplay Updates (Only if Crafting UI is closed) ---
+        if (this.craftingManager.isCrafting()) {
+            this.craftingManager.update(deltaMs);
+            // Player can move while crafting, handled in scene update
+        } else {
+            // Only process these inputs if NOT crafting AND Crafting UI is closed
+            this.creativeModeSelector.update(this.creativeModeEnabled);
+            
+            if (this.creativeModeSelector.regenerateCurrentScene && this.currentScene instanceof GameScene) {
+                console.log("Game: Handling scene regeneration request");
+                this.handleSceneRegeneration();
+                return; 
+            }
+
+            // --- Crafting UI Toggle --- 
+            if (this.inputHandler.craftingActionPressed) {
+                if (!this.craftingManager.isCrafting()) { // Don't open if already crafting
+                    this.craftingUI.toggle(); // Toggle Crafting UI visibility
+                } else {
+                    console.log("[Game] Cannot open crafting UI while crafting.");
+                }
+                 this.inputHandler.craftingActionPressed = false; // Consume press
+            }
+
+            // Check for creative mode toggle
+            if (this.inputHandler.toggleCreativeModePressed) {
+                this.creativeModeEnabled = !this.creativeModeEnabled;
+                console.log(`Creative Mode: ${this.creativeModeEnabled ? 'Enabled' : 'Disabled'}`);
+                if (!this.creativeModeEnabled && this.creativeModeSelector.deleteMode) {
+                    this.creativeModeSelector.deleteMode = false;
+                }
+            }
+
+            // Check for Save action (Manual F5)
+            if (this.inputHandler.saveKeyPressed) {
+                this.saveGame(); // Call the unified save method
+            }
+
+            // TEMP: Check for Debug Teleport
+            if (this.inputHandler.teleportDebugPressed) {
+                // Save current scene state BEFORE changing
+                this.currentScene.save().then(() => {
+                    this.changeScene('world-0-0');
+                }).catch(err => {
+                    console.error("Error saving scene before teleport:", err);
+                    this.changeScene('world-0-0');
+                });
+                // Exit update early to prevent further processing while async save/change happens
+                return; 
+            }
+
+            // --- Handle UI Interactions --- 
+            // Only need to handle inventory clicks here now
+            if (this.inputHandler.uiMouseClicked || this.inputHandler.uiDropActionClicked) {
+                // handleInventoryClick returns true if it handled the click
+                if (!this.handleInventoryClick()) {
+                    // If not inventory, the creative selector handled its own click in its update method
+                    // No further action needed here for creative panel clicks.
+                }
+            }
+            // --- End UI Interactions ---
         }
 
-        // Delegate update to the current scene - pass selection state from the selector
+        // Scene update should happen regardless of crafting for animations, NPC movement etc.
+        // But GameplayController inside scene.update will check playerIsCrafting state.
         this.currentScene.update(
             deltaTime, 
-            this.creativeModeEnabled, 
-            this.creativeModeSelector.selectedObjectType, 
-            this.creativeModeSelector.selectedTerrainType,
-            this.creativeModeSelector.selectedItemId,
-            this.creativeModeSelector.deleteMode
+            this.creativeModeEnabled && !this.playerIsCrafting, // Creative mode input disabled while crafting 
+            this.playerIsCrafting ? null : this.creativeModeSelector.selectedObjectType, 
+            this.playerIsCrafting ? null : this.creativeModeSelector.selectedTerrainType,
+            this.playerIsCrafting ? null : this.creativeModeSelector.selectedItemId,
+            this.playerIsCrafting ? false : this.creativeModeSelector.deleteMode
         );
-
-        // Check for creative mode toggle
-        if (this.inputHandler.toggleCreativeModePressed) {
-            this.creativeModeEnabled = !this.creativeModeEnabled;
-            console.log(`Creative Mode: ${this.creativeModeEnabled ? 'Enabled' : 'Disabled'}`);
-            
-            // If exiting creative mode, also exit delete mode
-            if (!this.creativeModeEnabled && this.creativeModeSelector.deleteMode) {
-                this.creativeModeSelector.deleteMode = false;
-            }
-            
-            // Optional: Reset selection when toggling mode?
-            // this.creativeModeSelector.selectedObjectType = 'Tree'; // Or keep last selection
-            // this.creativeModeSelector.selectedTerrainType = null;
-        }
-
-        // Check for Save action (Manual F5)
-        if (this.inputHandler.saveKeyPressed) {
-            this.saveGame(); // Call the unified save method
-        }
-
-        // TEMP: Check for Debug Teleport
-        if (this.inputHandler.teleportDebugPressed) {
-            // Save current scene state BEFORE changing
-            this.currentScene.save().then(() => {
-                this.changeScene('world-0-0');
-            }).catch(err => {
-                console.error("Error saving scene before teleport:", err);
-                this.changeScene('world-0-0');
-            });
-            // Exit update early to prevent further processing while async save/change happens
-            return; 
-        }
-
-        // --- Handle UI Interactions --- 
-        // Only need to handle inventory clicks here now
-        if (this.inputHandler.uiMouseClicked || this.inputHandler.uiDropActionClicked) {
-            // handleInventoryClick returns true if it handled the click
-            if (!this.handleInventoryClick()) {
-                // If not inventory, the creative selector handled its own click in its update method
-                // No further action needed here for creative panel clicks.
-            }
-        }
-        // --- End UI Interactions ---
 
         // Reset input handler flags for next frame (moved after teleport check)
         // This ensures the teleport flag itself gets reset eventually if teleport doesn't exit early
@@ -333,38 +381,45 @@ export class Game {
     // --- End Handle Inventory Click ---
 
     public draw(): void {
-        if (this.isLoading) return; // Don't draw game world while loading
-        if (!this.currentScene) {
-            // Optional: Draw loading state
+        if (this.isLoading || !this.currentScene || !this.player || !this.craftingUI) {
+            // Simplified loading screen or early exit
             this.renderer.clear();
-            const ctx = this.renderer.getContext();
-            ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('Loading...', this.renderer.getWidth() / 2, this.renderer.getHeight() / 2);
+            if (this.isLoading) {
+                this.renderer.drawText('Loading...', this.renderer.getWidth() / 2 - 50, this.renderer.getHeight() / 2, 'white', '24px Arial');
+            }
             return;
         } 
 
-        // Delegate draw to the current scene - pass selection state from selector
-        this.currentScene.draw(
-            this.creativeModeEnabled, 
-            this.creativeModeSelector.selectedObjectType, 
-            this.creativeModeSelector.selectedTerrainType,
-            this.creativeModeSelector.selectedItemId,
-            this.creativeModeSelector.deleteMode
-        );
+        // Always pass creative mode parameters to scene.draw, defaulting if player is crafting
+        const creativeEnabledForDraw = this.creativeModeEnabled && !this.playerIsCrafting;
+        this.currentScene.draw( // Restore arguments here
+            creativeEnabledForDraw, 
+            creativeEnabledForDraw ? this.creativeModeSelector.selectedObjectType : null, 
+            creativeEnabledForDraw ? this.creativeModeSelector.selectedTerrainType : null, 
+            creativeEnabledForDraw ? this.creativeModeSelector.selectedItemId : null, 
+            creativeEnabledForDraw ? this.creativeModeSelector.deleteMode : false
+        ); 
+        
+        // Corrected: Pass assetLoader instead of ITEM_CONFIG
+        this.renderer.drawInventoryUI(this.player.inventory, this.player.equippedItemId, this.assetLoader); 
+        this.creativeModeSelector.draw(this.creativeModeEnabled && !this.playerIsCrafting && !this.craftingUI.getIsOpen()); // Panel only if creative AND not crafting AND crafting UI is NOT open
 
-        // --- Draw Inventory UI --- 
-        // Always draw if player exists
-        if (this.player) {
-            this.renderer.drawInventoryUI(this.player.inventory, this.player.equippedItemId, this.assetLoader);
+        // Draw Crafting Progress Bar if crafting
+        if (this.craftingManager && this.craftingManager.isCrafting()) {
+            const progress = this.craftingManager.getActiveCraftingProgress();
+            const recipeName = this.craftingManager.getCurrentRecipeName();
+            if (progress !== null && recipeName !== null) {
+                const barWidth = 200;
+                const barHeight = 20;
+                const barX = (this.renderer.getWidth() - barWidth) / 2;
+                const barY = this.renderer.getHeight() - barHeight - 20 - 60; // Position above inventory
+                this.renderer.drawProgressBar(barX, barY, barWidth, barHeight, progress, '#4CAF50', recipeName);
+            }
         }
-        // --- End Draw Inventory UI ---
 
-        // --- Draw Creative Mode Panel --- 
-        // Call the selector's draw method directly
-        this.creativeModeSelector.draw(this.creativeModeEnabled);
-        // --- End Draw Creative Mode Panel ---
+        // --- Draw Crafting UI (if open) --- 
+        // Draw this last so it appears on top
+        this.craftingUI.draw();
     }
     
     // Boundary check logic is now moved to the scene
@@ -622,4 +677,41 @@ export class Game {
             this.isLoading = false;
         }
     }
+
+    // --- Crafting System Helper Methods ---
+    public setPlayerCraftingState(isCrafting: boolean): void {
+        this.playerIsCrafting = isCrafting;
+        console.log(`[Game] Player crafting state set to: ${isCrafting}`);
+        // If stopping crafting, ensure input for gameplay is re-enabled if it was suppressed.
+        // This is implicitly handled by how GameplayController checks this flag.
+    }
+
+    public isPlayerCurrentlyCrafting(): boolean {
+        return this.playerIsCrafting;
+    }
+
+    // Method for CraftingManager to call to spawn items
+    public spawnItemNearPlayer(itemId: string, quantity: number): void {
+        if (this.currentScene instanceof GameScene && this.player) {
+            this.currentScene.spawnDroppedItemNearPlayer(itemId, quantity);
+        } else {
+            console.error("[Game] Cannot spawn item: Current scene is not GameScene or player not available.");
+        }
+    }
+
+    /** Helper to get EntityManager for CraftingManager initialization, can be expanded later */
+    public getEntityManagerOrFail(): EntityManager {
+        if (this.currentScene instanceof GameScene) {
+            return this.currentScene.getEntityManager(); // Assumes GameScene has getEntityManager()
+        }
+        // Fallback or error if not a GameScene - this needs careful handling
+        // For now, this might be an issue if CM is init before scene is fully ready
+        // Let's ensure CM is created after Player in init(), and GameScene should expose its EntityManager.
+        console.warn("[Game] Attempted to get EntityManager before GameScene was fully initialized or from a non-GameScene.");
+        // This is a temporary placeholder. Proper DI or service location might be better.
+        // For now, the CraftingManager init is moved to after player creation in Game.init()
+        // and GameScene needs getEntityManager()
+        throw new Error("[Game] EntityManager requested but current scene is not a GameScene or not initialized.");
+    }
+    // --- End Crafting System Helper Methods ---
 } 

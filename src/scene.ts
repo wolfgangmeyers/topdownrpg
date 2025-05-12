@@ -472,6 +472,12 @@ export class GameScene extends Scene {
         }
     }
 
+    // --- Getter for EntityManager ---
+    public getEntityManager(): EntityManager {
+        return this.entityManager;
+    }
+    // --- End Getter for EntityManager ---
+
     // --- REMOVED METHODS (moved to other classes) ---
     // All private methods related to drawing, input handling, state management, etc., are now removed.
 } 

@@ -266,11 +266,44 @@ export class Renderer {
     }
     // --- End Draw Inventory UI ---
 
-    // --- REMOVED drawCreativePanel --- 
-    // Logic moved to ui/creativeModeSelector.ts
-    // public drawCreativePanel(...) { ... }
+    // --- Draw Progress Bar ---
+    public drawProgressBar(x: number, y: number, width: number, height: number, progress: number, color: string = '#4CAF50', text?: string): void {
+        this.ctx.save();
 
-    // --- New Method: Draw Debug Rectangle Outline (World Coords) ---
+        // Background
+        this.ctx.fillStyle = '#555'; // Dark grey background
+        this.ctx.fillRect(x, y, width, height);
+
+        // Progress Fill
+        this.ctx.fillStyle = color;
+        this.ctx.fillRect(x, y, width * progress, height);
+
+        // Border
+        this.ctx.strokeStyle = '#333';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(x, y, width, height);
+
+        // Optional Text (e.g., recipe name)
+        if (text) {
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = 'bold 12px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            const textX = x + width / 2;
+            const textY = y + height / 2;
+            
+            // Draw text shadow for readability
+            this.ctx.fillStyle = 'black';
+            this.ctx.fillText(text, textX + 1, textY + 1);
+            this.ctx.fillStyle = 'white';
+            this.ctx.fillText(text, textX, textY);
+        }
+        
+        this.ctx.restore();
+    }
+    // --- End Draw Progress Bar ---
+
+    // --- Draw Debug Rect ---
     /**
      * Draws a rectangle outline for debugging purposes at world coordinates.
      * Assumes the input box uses center coordinates.
@@ -301,5 +334,5 @@ export class Renderer {
         // Reset line dash
         this.ctx.setLineDash([]); 
     }
-    // --- End New Method ---
+    // --- End Draw Debug Rect ---
 } 

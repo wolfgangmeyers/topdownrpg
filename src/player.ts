@@ -116,6 +116,20 @@ export class Player {
     }
 
     /**
+     * Checks if the player has a specific quantity of an item in their inventory.
+     * @param itemId The ID of the item to check for.
+     * @param quantity The minimum quantity required.
+     * @returns True if the player has enough of the item, false otherwise.
+     */
+    hasItem(itemId: string, quantity: number = 1): boolean {
+        const existingSlot = this.inventory.get(itemId);
+        if (!existingSlot) {
+            return false; // Item not found
+        }
+        return existingSlot.quantity >= quantity;
+    }
+
+    /**
      * Removes an item from the player's inventory.
      * Returns true if the item was removed successfully, false otherwise.
      */

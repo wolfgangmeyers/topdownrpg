@@ -20,6 +20,7 @@ export class InputHandler {
     public uiDropActionClicked: boolean = false; // Flag for Shift+Click on UI
     public teleportDebugPressed: boolean = false; // TEMP: Flag for debug teleport
     public escapePressed: boolean = false; // Flag for escape key
+    public craftingActionPressed: boolean = false; // Flag for crafting action key (B)
     
     private renderer: Renderer | null = null; // Add renderer reference
 
@@ -84,6 +85,9 @@ export class InputHandler {
             if (lowerCaseKey === 't') {
                 this.teleportDebugPressed = true;
             }
+            if (lowerCaseKey === 'b') { // Added for crafting
+                this.craftingActionPressed = true;
+            }
         });
 
         window.addEventListener('keyup', (e) => {
@@ -104,6 +108,13 @@ export class InputHandler {
             this.dropItemPressed = false; // Reset drop item flag
             this.uiDropActionClicked = false; // Reset UI drop action flag
             this.teleportDebugPressed = false; // Reset debug flag
+            if (lowerCaseKey === 'c') this.toggleCreativeModePressed = false;
+            if (e.key === 'F5') this.saveKeyPressed = false;
+            if (e.key === 'F9') this.loadKeyPressed = false;
+            if (lowerCaseKey === 'e') this.interactPressed = false;
+            if (lowerCaseKey === 'g') this.dropItemPressed = false;
+            if (lowerCaseKey === 't') this.teleportDebugPressed = false;
+            if (lowerCaseKey === 'b') this.craftingActionPressed = false; // Added for crafting
             // Note: deletePressed is reset on keyup, might need adjustment based on usage
         });
 
@@ -180,6 +191,7 @@ export class InputHandler {
         this.uiDropActionClicked = false; // Reset UI drop action flag
         this.teleportDebugPressed = false; // Reset debug flag
         this.escapePressed = false; // Reset escape flag
+        this.craftingActionPressed = false; // Reset crafting action flag
         // Note: deletePressed is reset on keyup, might need adjustment based on usage
     }
 

@@ -192,6 +192,13 @@ export class GameplayController {
     }
 
     private handleToolUsage(): void {
+        // Prevent tool usage if the player is currently crafting
+        if (this.game.isPlayerCurrentlyCrafting()) {
+            // Optionally, provide feedback to the player that they cannot use tools while crafting
+            // console.log("[GameplayController] Cannot use tool: Player is crafting.");
+            return; 
+        }
+
         if (!this.inputHandler.useToolPressed) return;
 
         const now = Date.now();
