@@ -29,8 +29,8 @@ export const CRAFTING_RECIPES: Record<string, CraftingRecipe> = {
         id: 'knife_from_resources',
         outputItemId: 'knife',
         outputQuantity: 1,
-        name: 'Craft Knife',
-        description: 'Fashion a sharp knife from basic resources.',
+        name: 'Knife',
+        description: 'Craft a basic knife from a stick and a sharp stone.',
         ingredients: [
             { itemId: 'stick', quantity: 1 },
             { itemId: 'stone_triangular', quantity: 1 }

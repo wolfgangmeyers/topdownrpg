@@ -5,6 +5,7 @@ import { CraftingManager } from '../crafting/craftingManager';
 import { CraftingRecipe } from '../crafting/recipes';
 import { Player } from '../player';
 import { getItemConfig } from '../item';
+import { drawButton, ButtonStyle } from './components/button'; // Import the new button component
 
 export class CraftingUI {
     private isOpen: boolean = false;
@@ -53,11 +54,11 @@ export class CraftingUI {
         this.recipeDetailHeight = this.panelHeight - 20; // Account for padding
 
         this.craftButtonX = this.recipeDetailX + (this.recipeDetailWidth - this.craftButtonWidth) / 2;
-        // Position button near the bottom of the details section
-        this.craftButtonY = this.recipeDetailY + this.recipeDetailHeight - this.craftButtonHeight - 50; 
+        // Position button near the bottom of the details section, slightly higher
+        this.craftButtonY = this.recipeDetailY + this.recipeDetailHeight - this.craftButtonHeight - 30; 
     }
 
-    public toggle(): void {
+    public async toggle(): Promise<void> {
         this.isOpen = !this.isOpen;
         if (this.isOpen) {
             console.log("Crafting UI Opened");
@@ -65,6 +66,35 @@ export class CraftingUI {
             this.selectedRecipe = null; // Reset selection when opening
             this.scrollOffset = 0;
             this.recalculateLayout(); // Ensure layout is correct if screen resized while closed
+
+            // --- Preload assets for visible recipes --- 
+            const requiredAssetPaths = new Set<string>();
+            for (const recipe of this.recipes) {
+                // Add output item asset
+                const outputConfig = getItemConfig(recipe.outputItemId);
+                if (outputConfig) {
+                    requiredAssetPaths.add(outputConfig.assetPath);
+                }
+                // Add ingredient assets
+                for (const ingredient of recipe.ingredients) {
+                    const ingredientConfig = getItemConfig(ingredient.itemId);
+                    if (ingredientConfig) {
+                        requiredAssetPaths.add(ingredientConfig.assetPath);
+                    }
+                }
+            }
+            
+            if (requiredAssetPaths.size > 0) {
+                console.log("Crafting UI: Loading assets for recipes...", Array.from(requiredAssetPaths));
+                try {
+                    await this.assetLoader.loadImages(Array.from(requiredAssetPaths));
+                    console.log("Crafting UI: Recipe assets loaded.");
+                } catch (error) {
+                    console.error("Crafting UI: Error loading recipe assets:", error);
+                }
+            }
+            // --- End Asset Preloading ---
+
         } else {
             console.log("Crafting UI Closed");
         }
@@ -179,23 +209,29 @@ export class CraftingUI {
             let currentY = this.recipeDetailY + 10;
 
             // Recipe Name
+            ctx.textAlign = 'left'; // Ensure default alignment
+            ctx.textBaseline = 'top'; // Ensure default alignment
             this.renderer.drawText(this.selectedRecipe.name, detailX, currentY, 'white', 'bold 18px Arial');
-            currentY += 30;
+            currentY += 35; // Increased spacing
 
             // Output Item
             const outputItemConfig = getItemConfig(this.selectedRecipe.outputItemId);
             if (outputItemConfig) {
                 const outputIcon = this.assetLoader.getImage(outputItemConfig.assetPath);
+                const iconDrawSize = this.ingredientIconSize * 1.5;
+                const textY = currentY + iconDrawSize / 2; // Center text vertically with icon
                 if (outputIcon) {
-                    ctx.drawImage(outputIcon, detailX, currentY, this.ingredientIconSize * 1.5, this.ingredientIconSize * 1.5);
+                    ctx.drawImage(outputIcon, detailX, currentY, iconDrawSize, iconDrawSize);
                 }
-                this.renderer.drawText(`-> ${this.selectedRecipe.outputQuantity} x ${outputItemConfig.name}`, detailX + this.ingredientIconSize * 1.5 + 5, currentY + (this.ingredientIconSize * 1.5) / 2, 'white', '16px Arial');
-                currentY += this.ingredientIconSize * 1.5 + 10;
+                ctx.textBaseline = 'middle'; // Align text vertically
+                this.renderer.drawText(`→ ${this.selectedRecipe.outputQuantity} x ${outputItemConfig.name}`, detailX + iconDrawSize + 8, textY, 'white', '16px Arial');
+                currentY += iconDrawSize + 15; // Increased spacing
             }
 
             // Ingredients Header
+            ctx.textBaseline = 'top'; // Reset baseline
             this.renderer.drawText("Ingredients:", detailX, currentY, 'lightblue', '14px Arial');
-            currentY += 20;
+            currentY += 25; // Increased spacing
 
             // Ingredient List
             for (const ingredient of this.selectedRecipe.ingredients) {
@@ -203,37 +239,58 @@ export class CraftingUI {
                 if (itemConfig) {
                     const playerHasEnough = this.player.hasItem(ingredient.itemId, ingredient.quantity);
                     const icon = this.assetLoader.getImage(itemConfig.assetPath);
+                    const textY = currentY + this.ingredientIconSize / 2; // Center text vertically with icon
                     if (icon) {
                         ctx.drawImage(icon, detailX, currentY, this.ingredientIconSize, this.ingredientIconSize);
                     }
                     const text = `${ingredient.quantity} x ${itemConfig.name}`;
                     const color = playerHasEnough ? 'lightgreen' : 'salmon';
-                    this.renderer.drawText(text, detailX + this.ingredientIconSize + 5, currentY + this.ingredientIconSize / 2, color, '14px Arial');
-                    currentY += this.ingredientIconSize + 5; // Move down for next ingredient
+                    ctx.textBaseline = 'middle'; // Align text vertically
+                    this.renderer.drawText(text, detailX + this.ingredientIconSize + 8, textY, color, '14px Arial');
+                    currentY += this.ingredientIconSize + 10; // Increased spacing
                 }
             }
             
             // Required Tool / Station (Optional) - TODO
-            currentY += 15;
+            currentY += 20; // Increased spacing
+            ctx.textBaseline = 'top'; // Reset baseline
             if(this.selectedRecipe.requiredToolId){
                  this.renderer.drawText(`Requires Tool: ${getItemConfig(this.selectedRecipe.requiredToolId)?.name || 'Unknown'}`, detailX, currentY, 'orange', '12px Arial');
-                 currentY += 15;
+                 currentY += 18; // Increased spacing
             }
              if(this.selectedRecipe.requiredStationId){
                  this.renderer.drawText(`Requires Station: ${this.selectedRecipe.requiredStationId}`, detailX, currentY, 'orange', '12px Arial');
-                 currentY += 15;
+                 currentY += 18; // Increased spacing
             }
 
 
             // Craft Button
             const canCraft = this.craftingManager.canCraft(this.selectedRecipe.id);
-            ctx.fillStyle = canCraft ? (this.craftButtonHover ? '#6f6' : '#4a4') : '#555'; // Green if craftable, gray otherwise
-            ctx.fillRect(this.craftButtonX, this.craftButtonY, this.craftButtonWidth, this.craftButtonHeight);
-            ctx.strokeStyle = canCraft ? '#cfc' : '#888';
-            ctx.strokeRect(this.craftButtonX, this.craftButtonY, this.craftButtonWidth, this.craftButtonHeight);
-            this.renderer.drawText("Craft", this.craftButtonX + this.craftButtonWidth / 2, this.craftButtonY + this.craftButtonHeight / 2, canCraft ? 'white' : 'darkgray', 'bold 16px Arial');
-            ctx.textAlign = 'center'; // Ensure text is centered
-            ctx.textBaseline = 'middle';
+            
+            const craftButtonStyle: ButtonStyle = {
+                bgColor: '#4a4', // Green
+                textColor: 'white',
+                borderColor: '#cfc',
+                font: 'bold 16px Arial',
+                hoverBgColor: '#6f6',
+                hoverTextColor: 'white',
+                hoverBorderColor: '#cfc', // Keep same border on hover for this style
+                disabledBgColor: '#555', // Gray
+                disabledTextColor: 'darkgray',
+                disabledBorderColor: '#888',
+            };
+
+            drawButton(
+                this.renderer,
+                this.craftButtonX,
+                this.craftButtonY,
+                this.craftButtonWidth,
+                this.craftButtonHeight,
+                "Craft",
+                this.craftButtonHover,
+                !canCraft, // isDisabled is true if cannot craft
+                craftButtonStyle
+            );
         }
 
         ctx.restore();

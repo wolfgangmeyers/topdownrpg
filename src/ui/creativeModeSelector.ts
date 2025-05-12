@@ -4,6 +4,7 @@ import { AssetLoader } from '../assets';
 import { TerrainType, TERRAIN_CONFIG } from '../terrain'; // Import terrain types and config
 import { ItemType, ITEM_CONFIG } from '../item';
 import { deleteAllScenesExcept, getAllSceneIds } from '../db'; // Import deleteAllScenesExcept and getAllSceneIds functions
+import { drawButton, ButtonStyle } from './components/button'; // Import the new button component
 
 // Define placeable object types (Moved from game.ts)
 export type PlaceableObjectType = 'Tree' | 'House' | 'DoorExit'; // Restored DoorExit
@@ -493,104 +494,92 @@ export class CreativeModeSelector {
 
         // Draw the delete mode button
         const deleteModeButtonBounds = this.getDeleteModeButtonBounds();
-        
-        // Button background - highlighted when active
-        ctx.fillStyle = this.deleteMode ? 'rgba(50, 120, 255, 0.7)' : 'rgba(70, 70, 200, 0.4)';
-        ctx.fillRect(deleteModeButtonBounds.x, deleteModeButtonBounds.y, deleteModeButtonBounds.width, deleteModeButtonBounds.height);
-        
-        // Button border
-        ctx.strokeStyle = this.deleteMode ? 'rgba(150, 150, 255, 0.9)' : 'rgba(100, 100, 200, 0.6)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(deleteModeButtonBounds.x, deleteModeButtonBounds.y, deleteModeButtonBounds.width, deleteModeButtonBounds.height);
-        
-        // Button text
-        ctx.fillStyle = 'white';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        const deleteModeText = this.deleteMode ? 'Deleting Objects' : 'Delete Objects';
-        ctx.fillText(deleteModeText, 
-            deleteModeButtonBounds.x + deleteModeButtonBounds.width / 2, 
-            deleteModeButtonBounds.y + deleteModeButtonBounds.height / 2);
+        const deleteModeButtonStyle: ButtonStyle = {
+            bgColor: 'rgba(70, 70, 200, 0.4)',       // Blue normal
+            textColor: 'white',
+            borderColor: 'rgba(100, 100, 200, 0.6)',
+            hoverBgColor: 'rgba(90, 90, 220, 0.6)',   // Brighter blue hover
+            hoverBorderColor: 'rgba(120, 120, 240, 0.8)',
+            // Add specific style for when delete mode is active (treat as hover for visual feedback)
+            // If we want a truly distinct active state, we might need to pass another param to drawButton
+            // For now, let's make active look like hover.
+            // We can achieve this by setting isHovering based on this.deleteMode
+        };
+         drawButton(
+            this.renderer,
+            deleteModeButtonBounds.x,
+            deleteModeButtonBounds.y,
+            deleteModeButtonBounds.width,
+            deleteModeButtonBounds.height,
+            this.deleteMode ? 'Deleting Objects' : 'Delete Objects',
+            this.deleteMode, // Treat active state visually like hover for now
+            false, // Not disabled
+            deleteModeButtonStyle
+        );
 
         // Draw the delete button
         const deleteButtonBounds = this.getDeleteButtonBounds();
-        
-        // Button background
-        ctx.fillStyle = this.isConfirmingDelete ? 'rgba(255, 50, 50, 0.6)' : 'rgba(220, 50, 50, 0.4)';
+        let deleteButtonText = 'Delete Other Scenes';
         if (this.isDeletingScenes) {
-            ctx.fillStyle = 'rgba(100, 100, 100, 0.6)'; // Disabled/processing appearance
-        }
-        ctx.fillRect(deleteButtonBounds.x, deleteButtonBounds.y, deleteButtonBounds.width, deleteButtonBounds.height);
-        
-        // Button border
-        ctx.strokeStyle = this.isConfirmingDelete ? 'rgba(255, 150, 150, 0.8)' : 'rgba(255, 100, 100, 0.5)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(deleteButtonBounds.x, deleteButtonBounds.y, deleteButtonBounds.width, deleteButtonBounds.height);
-        
-        // Button text
-        ctx.fillStyle = 'white';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        if (this.isDeletingScenes) {
-            ctx.fillText('Deleting scenes...', 
-                deleteButtonBounds.x + deleteButtonBounds.width / 2, 
-                deleteButtonBounds.y + deleteButtonBounds.height / 2);
+            deleteButtonText = 'Deleting scenes...';
         } else if (this.isConfirmingDelete) {
-            ctx.fillText('Confirm: Delete other scenes?', 
-                deleteButtonBounds.x + deleteButtonBounds.width / 2, 
-                deleteButtonBounds.y + deleteButtonBounds.height / 2);
+            deleteButtonText = 'Confirm: Delete other scenes?';
         } else if (this.deletionResult) {
-            ctx.fillText(this.deletionResult, 
-                deleteButtonBounds.x + deleteButtonBounds.width / 2, 
-                deleteButtonBounds.y + deleteButtonBounds.height / 2);
-        } else {
-            ctx.fillText('Delete Other Scenes', 
-                deleteButtonBounds.x + deleteButtonBounds.width / 2, 
-                deleteButtonBounds.y + deleteButtonBounds.height / 2);
+            deleteButtonText = this.deletionResult;
         }
+        const deleteButtonStyle: ButtonStyle = {
+            bgColor: 'rgba(220, 50, 50, 0.4)',       // Red normal
+            textColor: 'white',
+            borderColor: 'rgba(255, 100, 100, 0.5)',
+            hoverBgColor: 'rgba(255, 50, 50, 0.6)',   // Brighter red hover/confirm
+            hoverBorderColor: 'rgba(255, 150, 150, 0.8)',
+            disabledBgColor: 'rgba(100, 100, 100, 0.6)', // Gray disabled
+            disabledTextColor: 'darkgray',
+            disabledBorderColor: 'rgba(120, 120, 120, 0.7)',
+        };
+         drawButton(
+            this.renderer,
+            deleteButtonBounds.x,
+            deleteButtonBounds.y,
+            deleteButtonBounds.width,
+            deleteButtonBounds.height,
+            deleteButtonText,
+            this.isConfirmingDelete, // Use hover style for confirmation
+            this.isDeletingScenes,   // Use disabled style while processing
+            deleteButtonStyle
+        );
 
         // Draw the regenerate button
         const regenerateButtonBounds = this.getRegenerateButtonBounds();
-        
-        // Button background
-        ctx.fillStyle = this.isConfirmingRegenerate ? 'rgba(50, 200, 50, 0.6)' : 'rgba(50, 150, 50, 0.4)';
-        if (this.isRegenerating) {
-            ctx.fillStyle = 'rgba(100, 100, 100, 0.6)'; // Disabled/processing appearance
-        }
-        ctx.fillRect(regenerateButtonBounds.x, regenerateButtonBounds.y, regenerateButtonBounds.width, regenerateButtonBounds.height);
-        
-        // Button border
-        ctx.strokeStyle = this.isConfirmingRegenerate ? 'rgba(100, 255, 100, 0.8)' : 'rgba(100, 200, 100, 0.5)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(regenerateButtonBounds.x, regenerateButtonBounds.y, regenerateButtonBounds.width, regenerateButtonBounds.height);
-        
-        // Button text
-        ctx.fillStyle = 'white';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        if (this.isRegenerating) {
-            ctx.fillText('Regenerating scene...', 
-                regenerateButtonBounds.x + regenerateButtonBounds.width / 2, 
-                regenerateButtonBounds.y + regenerateButtonBounds.height / 2);
+        let regenerateButtonText = 'Regenerate Current Scene';
+         if (this.isRegenerating) {
+            regenerateButtonText = 'Regenerating scene...';
         } else if (this.isConfirmingRegenerate) {
-            ctx.fillText('Confirm: Regenerate Scene?', 
-                regenerateButtonBounds.x + regenerateButtonBounds.width / 2, 
-                regenerateButtonBounds.y + regenerateButtonBounds.height / 2);
+            regenerateButtonText = 'Confirm: Regenerate Scene?';
         } else if (this.regenerationResult) {
-            ctx.fillText(this.regenerationResult, 
-                regenerateButtonBounds.x + regenerateButtonBounds.width / 2, 
-                regenerateButtonBounds.y + regenerateButtonBounds.height / 2);
-        } else {
-            ctx.fillText('Regenerate Current Scene', 
-                regenerateButtonBounds.x + regenerateButtonBounds.width / 2, 
-                regenerateButtonBounds.y + regenerateButtonBounds.height / 2);
+            regenerateButtonText = this.regenerationResult;
         }
+        const regenerateButtonStyle: ButtonStyle = {
+            bgColor: 'rgba(50, 150, 50, 0.4)',       // Green normal
+            textColor: 'white',
+            borderColor: 'rgba(100, 200, 100, 0.5)',
+            hoverBgColor: 'rgba(50, 200, 50, 0.6)',   // Brighter green hover/confirm
+            hoverBorderColor: 'rgba(100, 255, 100, 0.8)',
+            disabledBgColor: 'rgba(100, 100, 100, 0.6)', // Gray disabled
+            disabledTextColor: 'darkgray',
+            disabledBorderColor: 'rgba(120, 120, 120, 0.7)',
+        };
+        drawButton(
+            this.renderer,
+            regenerateButtonBounds.x,
+            regenerateButtonBounds.y,
+            regenerateButtonBounds.width,
+            regenerateButtonBounds.height,
+            regenerateButtonText,
+            this.isConfirmingRegenerate, // Use hover style for confirmation
+            this.isRegenerating, // Use disabled style while processing
+            regenerateButtonStyle
+        );
 
         ctx.restore();
     }

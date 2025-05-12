@@ -198,6 +198,7 @@ export class Game {
         // 1. Check for Escape key: Close Crafting UI if open, otherwise cancel crafting task
         if (this.inputHandler.escapePressed) {
             if (this.craftingUI.getIsOpen()) {
+                // Call async toggle but don't await it in the main loop
                 this.craftingUI.toggle(); // Close Crafting UI
             } else if (this.craftingManager.isCrafting()) {
                 this.craftingManager.cancelCurrentTask(); // Cancel active craft
@@ -231,7 +232,8 @@ export class Game {
             // --- Crafting UI Toggle --- 
             if (this.inputHandler.craftingActionPressed) {
                 if (!this.craftingManager.isCrafting()) { // Don't open if already crafting
-                    this.craftingUI.toggle(); // Toggle Crafting UI visibility
+                    // Call async toggle but don't await it in the main loop
+                    this.craftingUI.toggle(); 
                 } else {
                     console.log("[Game] Cannot open crafting UI while crafting.");
                 }

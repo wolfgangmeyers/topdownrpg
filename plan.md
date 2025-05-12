@@ -90,10 +90,41 @@ This document outlines the plan for creating a web-based, top-down action RPG us
 *   **UI:**
     *   Display player HP on the main game screen (`Renderer` drawing HUD, potentially via a UI component).
 
-## 7. Refinement & Expansion - Phase 5
+## 7. Crafting System (Basic) - Phase 6 (Implemented)
+
+*   **Goal:** Allow the player to craft items from resources.
+*   **Design Document:** Created `crafting.md` outlining the system.
+*   **Core Logic (`crafting/`):**
+    *   `recipes.ts`: Defines `CraftingRecipe`, `CraftingIngredient`, holds `CRAFTING_RECIPES`. (Initial: Knife from stick/sharp stone).
+    *   `craftingTask.ts`: Defines `CraftingTask` for managing active craft state and timer.
+    *   `craftingManager.ts`: Defines `CraftingManager` to handle:
+        *   Recipe validation (`canCraft`: checks ingredients, required tool/station - future).
+        *   Starting/updating/cancelling tasks.
+        *   Ingredient consumption (`Player.hasItem`, `Player.removeItem`).
+        *   Output item handling (add to player inventory or drop via `Game.spawnItemNearPlayer`).
+*   **UI (`ui/craftingUI.ts`):**
+    *   Basic UI panel toggled by 'B' key.
+    *   Displays list of available recipes (`CraftingManager.getAvailableRecipes`).
+    *   Shows details for selected recipe (output, ingredients, availability indication).
+    *   "Craft" button to initiate crafting.
+    *   Handles mouse input for selection and crafting.
+    *   Pauses other game interactions when open.
+    *   Proactively loads ingredient/output icons via `AssetLoader` when opened to prevent missing images.
+*   **Integration & Dependencies:**
+    *   `Player.hasItem` method added.
+    *   `InputHandler` tracks 'B' (toggle UI) and 'ESC' (cancel craft/close UI).
+    *   `Renderer` added `drawProgressBar`.
+    *   `Game` manages `CraftingManager`, `CraftingUI` instances, `playerIsCrafting` state, updates managers/UI, draws progress bar.
+    *   `GameplayController` prevents tool use while crafting.
+*   **UI Refinements:**
+    *   Recipe name display adjusted.
+    *   Unicode arrow `→` used.
+    *   Reusable `drawButton` component created (`ui/components/button.ts`) and used in `CraftingUI` and `CreativeModeSelector` for consistent rendering and centered text.
+
+## 8. Refinement & Expansion - Phase 7
 
 *   **Graphics & Animation:** Enhance SVGs, add simple animations.
-*   **Content:** Add more NPCs, dialogue, quests, items, enemies, map areas.
+*   **Content:** Add more NPCs, dialogue, quests, items, recipes, enemies, map areas.
 *   **Systems:** Expand inventory, combat, NPC behavior.
 *   **Audio:** Integrate sound effects (`AudioPlayer`).
 *   **Persistence:** Implement game saving/loading (`SceneStateManager` for scene, `Game` for player progress).

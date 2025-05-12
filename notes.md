@@ -336,3 +336,91 @@ This file captures key decisions, techniques, and context from the development s
     *   Maintains proper scene relationships in the game world
     *   Follows the established pattern of data integrity with linked scenes
     *   Provides a convenient way to refresh a scene without manual deletion and recreation 
+
+## Feature: Stick Item Density Adjustment
+
+*   **Change:** The `stickDensity` for the `SPARSE_FOREST` biome in `src/biomes.ts` was adjusted from 5 to 1.
+*   **Reason:** To match the density of other collectible ground resources like stone, providing a more balanced resource distribution.
+
+## Feature: Knife Asset and Item Integration
+
+*   **Asset Creation:**
+    *   A new SVG asset for a knife (`assets/svg/knife.svg`) was created.
+    *   The design was iterated upon based on feedback: initially, the blade was flag-like, then revised to a triangular shape, and finally adjusted for a narrower angle and upward point from the handle.
+*   **Item Configuration:**
+    *   The 'knife' was added to `ITEM_CONFIG` in `src/item.ts`.
+    *   Properties: `itemType: TOOL`, `equipable: true`, `stackable: false`.
+*   **Creative Mode Integration:**
+    *   'knife' was added to the `itemIdsToAdd` array in the `initializeItems` method of `src/ui/creativeModeSelector.ts`, making it available in the creative mode panel.
+
+## Feature: Crafting System
+
+A comprehensive crafting system was designed and implemented, allowing the player to create new items from resources.
+
+*   **Design (`crafting.md`):**
+    *   A design document (`crafting.md`) was created, outlining:
+        *   Player experience (always-known recipes, ingredients, optional tools/stations, timed progress with cancellation, inventory handling).
+        *   Data structures (`CraftingIngredient`, `CraftingRecipe`).
+        *   Class architecture (`CraftingTask`, `CraftingManager`, `CraftingUI`).
+        *   Initial recipe: Knife (1 stick + 1 sharp stone).
+    *   Clarifications added: Player can move but not use tools while crafting; sound effects to be handled later.
+*   **Core Logic Implementation:**
+    *   **`src/crafting/recipes.ts`:**
+        *   Defined `CraftingIngredient` and `CraftingRecipe` interfaces.
+        *   Added `CRAFTING_RECIPES` constant and the first recipe: `knife_from_resources` (output: 'knife', ingredients: 1 'stick', 1 'stone_triangular', duration: 2000ms).
+    *   **`src/crafting/craftingTask.ts`:**
+        *   Defined `CraftingTask` class to manage the state and progress of an active crafting operation (recipe, startTime, duration).
+    *   **`src/crafting/craftingManager.ts`:**
+        *   Defined `CraftingManager` class responsible for:
+            *   Validating if a recipe can be crafted (`canCraft` - checks ingredients, tools, station).
+            *   Starting a new crafting task (`startCrafting`).
+            *   Updating the active crafting task (`update`).
+            *   Cancelling the current task (`cancelCurrentTask`).
+            *   Consuming ingredients from player inventory.
+            *   Giving the output item to the player (or dropping it if inventory is full).
+            *   Providing available recipes (`getAvailableRecipes`).
+    *   **Modifications to Existing Files:**
+        *   `src/player.ts`: Added `hasItem(itemId, quantity)` method.
+        *   `src/input.ts`: Added `craftingActionPressed` flag (mapped to 'B' key).
+        *   `src/renderer.ts`: Added `drawProgressBar(x, y, width, height, progress, color, text)` method.
+        *   `src/scene.ts` (`GameScene`): Added `getEntityManager()` method (used by `CraftingManager` via `Game.getEntityManagerOrFail`).
+        *   `src/game.ts`:
+            *   Instantiated `CraftingManager`.
+            *   Added `playerIsCrafting` state.
+            *   Added helper methods: `setPlayerCraftingState(isCrafting)`, `isPlayerCurrentlyCrafting()`, `spawnItemNearPlayer(itemId, quantity)`, `getEntityManagerOrFail()`.
+            *   Updated game loop:
+                *   Initially, 'B' key directly started knife craft.
+                *   'ESC' key cancels active craft if Crafting UI is not open.
+                *   Calls `craftingManager.update()` if crafting.
+                *   Calls `renderer.drawProgressBar()` if crafting.
+            *   Fixed initialization order: `CraftingManager` created after `GameScene` is loaded to ensure `EntityManager` is available.
+        *   `src/gameplayController.ts`: `handleToolUsage` now checks `game.isPlayerCurrentlyCrafting()` to prevent tool use during crafting.
+*   **Crafting UI Implementation (`src/ui/craftingUI.ts`):**
+    *   Created `CraftingUI` class to provide a user interface for selecting and initiating crafts.
+    *   **Functionality:**
+        *   `toggle()`: Shows/hides the UI.
+        *   `update()`: Handles mouse input for recipe selection and clicking the craft button. Consumes clicks via `InputHandler`.
+        *   `draw()`: Renders the UI panel, recipe list, selected recipe details (output, ingredients with availability indication), and craft button.
+    *   **Integration:**
+        *   `CraftingManager` got `getAvailableRecipes()` method.
+        *   `src/game.ts`:
+            *   Instantiated `CraftingUI`.
+            *   'B' key handler changed to `craftingUI.toggle()`.
+            *   Game loop calls `craftingUI.update()` and `craftingUI.draw()` when UI is open.
+            *   Game loop pauses other interactions (except ESC for closing UI) when UI is open.
+*   **UI Polishing & Refactoring:**
+    *   **Recipe Name:** Display name for `knife_from_resources` in `recipes.ts` changed from "Craft Knife" to "Knife".
+    *   **Arrow Icon:** Changed `->` to `→` (unicode arrow) in `CraftingUI` for output item display.
+    *   **Button Centering & Reusability:**
+        *   Addressed issues with text centering on the "Craft" button.
+        *   Created a reusable button component: `src/ui/components/button.ts` defining `drawButton(renderer, x, y, width, height, text, isHovering, isDisabled, customStyle)` and `ButtonStyle` interface.
+        *   `CraftingUI` refactored to use `drawButton` for its craft button, with custom styling.
+        *   `CreativeModeSelector` refactored to use `drawButton` for its "Regenerate", "Delete Objects", and "Delete Other Scenes" buttons, with respective custom styles.
+        *   The `drawButton` implementation was refined to use `ctx.fillText()` directly (instead of `renderer.drawText`) to ensure consistent text centering.
+*   **Crafting UI Asset Loading Fix:**
+    *   **Problem:** Ingredient icons (e.g., 'stick') would only appear in the Crafting UI if the corresponding item had already been rendered elsewhere in the scene, thus loaded by the `AssetLoader`.
+    *   **Solution:**
+        *   Modified `CraftingUI.toggle()` method to be `async`.
+        *   When the Crafting UI is opened, it now gathers all unique `assetPath`s for the output items and ingredients of all available recipes.
+        *   It then calls `await this.assetLoader.loadImages()` with these paths to ensure all necessary icons are loaded before the UI is drawn.
+        *   Calls to `craftingUI.toggle()` in `game.ts` were updated to not `await` the promise, allowing the async loading to occur without blocking the game loop. 

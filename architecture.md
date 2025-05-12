@@ -13,29 +13,28 @@ The architecture is component-based, centered around a main `Game` class that ma
 *   **`main.ts`**: Application entry point. Gets the canvas element, instantiates the `Game` class, and starts the main game loop (`requestAnimationFrame`).
 *   **`game.ts`**: Central orchestrator.
     *   Initializes and holds references to core systems (`Renderer`, `InputHandler`, `AssetLoader`, `AudioPlayer`).
-    *   Instantiates and holds reference to the `CreativeModeSelector` UI component.
+    *   Instantiates and holds references to UI components: `CreativeModeSelector`, `CraftingUI`.
     *   Manages the single `currentScene` instance and `currentSceneId`.
-    *   Handles scene transitions via `changeScene(newSceneId, contextData?)`:
-        *   Saves outgoing scene state (`currentScene.save()`).
-        *   Saves player data (`savePlayerData`) including the *new* `currentSceneId`.
-        *   Creates new `GameScene` instance, passing the `Game` instance and `contextData`.
-        *   Calls `newScene.load()`.
-        *   Positions player based on `contextData.targetPosition` or defaults (center for most scenes, near exit for interiors).
-        *   Resets input state.
+    *   Handles scene transitions via `changeScene(newSceneId, contextData?)`.
     *   Provides `getCurrentSceneId()` getter.
-    *   Handles global states like `isLoading`, `creativeModeEnabled`.
+    *   Instantiates and holds reference to `CraftingManager` (after `GameScene` is ready).
+    *   Provides helper methods used by `CraftingManager`: `setPlayerCraftingState`, `isPlayerCurrentlyCrafting`, `spawnItemNearPlayer`, `getEntityManagerOrFail`.
+    *   Handles global states like `isLoading`, `creativeModeEnabled`, `playerIsCrafting`.
     *   Manages player persistence (`localStorage`) via internal `savePlayerData`/`loadPlayerData` methods.
     *   Triggers scene persistence (`IndexedDB`) via `currentScene.save()` and explicit `saveGame()` method (e.g., on F5).
     *   Loads sounds via `AudioPlayer` during init.
     *   Handles resuming `AudioContext` on user interaction.
     *   Handles clicks on inventory UI (`handleInventoryClick`), calling `player` methods and `scene.spawnDroppedItemNearPlayer`.
-    *   Delegates `update` and `draw` calls to the `currentScene` and `CreativeModeSelector`.
+    *   Delegates `update` and `draw` calls to the `currentScene` and UI components (`CreativeModeSelector`, `CraftingUI`).
+    *   Handles game loop updates for `CraftingManager` and drawing the progress bar.
     *   Passes creative selection state (`selectedObjectType`, `selectedTerrainType`, `selectedItemId`) from `CreativeModeSelector` to the `currentScene`.
     *   Calls `Renderer.drawInventoryUI`.
-    *   Handles input related to global state changes (creative mode toggle, saving, debug teleport).
+    *   Handles input related to global state changes (creative mode toggle, crafting UI toggle (`B`), crafting cancellation (`ESC`), saving, debug teleport).
 *   **`scene.ts`**: Defines scene structure.
     *   `Scene` (Abstract Class): Base class defining the required interface (`load`, `update`, `draw`, `save`, `getId`, `getWorldDimensions`, `getTileSize`) and holding common references (`Game`, `Renderer`, etc.).
     *   `GameScene` (Concrete Class): Represents a playable area.
+        *   Holds `EntityManager`, `TerrainManager`, `SceneStateManager`, `GameplayController`, `CreativeController`, `SceneRenderer`.
+        *   Provides `getEntityManager()` method used for `CraftingManager` initialization.
         *   Accepts `contextData` in constructor.
         *   Holds `EntityManager`, `TerrainManager`, `SceneStateManager`, `GameplayController`, `CreativeController`, `SceneRenderer`.
         *   `load()`: Loads common assets, delegates state loading to `SceneStateManager`. If state doesn't exist, calls `generateDefaultLayout`. Updates `SceneRenderer` dimensions via `updateWorldDimensions`.
@@ -80,6 +79,7 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Handles gameplay input/logic: movement (terrain/object collision, adjusted house bounds, ignores `DoorExit`), tool use, item pickup/drop.
     *   Delegates all scene transition logic to the `SceneTransitionSystem`.
     *   Provides getter for closest pickup item.
+    *   Now checks `game.isPlayerCurrentlyCrafting()` to disable actions like tool usage during crafting.
 *   **`creativeController.ts`**: `CreativeController` class.
     *   Handles creative mode logic for object/terrain/item placement and deletion.
     *   Supports both DELETE key and delete mode for object removal.
@@ -97,26 +97,32 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   Provides UI drawing methods (screen coordinates): `drawInventoryUI`.
     *   Provides debug drawing method: `drawDebugRect`.
     *   Handles canvas resizing.
+    *   Added `drawProgressBar` method.
 *   **`input.ts`**: `InputHandler` class.
     *   Attaches listeners, tracks keys/mouse state (world/screen coords), manages single-frame action flags (`useToolPressed`, `mouseClicked`, `uiMouseClicked`, `deletePressed` etc.). Added debug teleport flag.
     *   Provides methods to query state (`getMovementDirection`, flags). Includes `consumeClick` and `resetMovement`. Requires `Renderer` reference.
+    *   Added `craftingActionPressed` flag.
+    *   Handles 'B' key for crafting toggle, 'ESC' for cancel/close UI.
 *   **`assets.ts`**: `AssetLoader` class for asynchronous loading and caching of image assets (`HTMLImageElement`).
+    *   Used by `CraftingUI` to preload recipe icons.
 *   **`audio.ts`**: `AudioPlayer` class for loading (`loadSound`), caching (`AudioBuffer`), and playing sounds via Web Audio API. Handles context resuming.
 *   **`player.ts`**: `Player` entity class.
     *   Stores state: position, dimensions, speed, rotation, SVG path.
     *   Stores inventory (`Map<string, InventorySlot>`), equipped item (`equippedItemId`).
     *   Stores animation state (`isSwinging`, timers).
     *   Provides methods for movement (`move`), updates (`update` - rotation, animation), inventory management (`addItem`, `removeItem`, `equipItem`, etc.), and animation control (`startSwing`, `getSwingAngleOffset`).
+    *   Added `hasItem(itemId, quantity)` method for inventory checks.
+    *   Inventory used by `CraftingManager` to consume ingredients and add output items.
 *   **`tree.ts`, `house.ts`**: Static object entity classes. (`Tree` includes health/state, `House` has `id`).
 *   **`doorExit.ts`**: Static object entity class. Stores `targetSceneId` and `targetPosition`. Has `setTarget` method.
 *   **`item.ts`**: Item definition module (`ItemType`, `Item` interface, `ITEM_CONFIG`, `getItemConfig`).
 *   **`droppedItem.ts`**: Defines the `DroppedItem` interface used by `EntityManager` and `SceneRenderer`.
-*   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. 
-    *   Manages selection state, drawing, and input handling. Loads own assets.
-    *   Includes functionality for: object/terrain/item selection, "Delete Objects" mode toggle (exit via ESC/toggle/exiting creative mode), and scene deletion with confirmation dialog.
-    *   Added biome regeneration functionality that allows regenerating the current scene with a new procedurally generated layout.
-    *   Filters `DoorExit` from UI panel while preserving config.
-    *   Tracks current scene ID to preserve during deletion operations.
+*   **`crafting/recipes.ts`**: Defines crafting data structures (`CraftingRecipe`, `CraftingIngredient`) and holds the master list of recipes (`CRAFTING_RECIPES`).
+*   **`crafting/craftingTask.ts`**: Defines the `CraftingTask` class, representing an active crafting process (recipe, start time, duration).
+*   **`crafting/craftingManager.ts`**: Manages the core crafting logic: validating recipes (`canCraft`), starting/updating/cancelling tasks, consuming ingredients, and producing output items. Interacts with `Player` and `Game` (via `EntityManager`) for inventory/world actions.
+*   **`ui/creativeModeSelector.ts`**: UI component for creative mode selection panel. Refactored to use the shared `drawButton` component.
+*   **`ui/craftingUI.ts`**: UI component for the crafting interface. Displays available recipes, details, and allows initiating crafts. Handles its own input, manages selection state, and preloads required item assets via `AssetLoader`. Uses the shared `drawButton` component.
+*   **`ui/components/button.ts`**: Defines a reusable `drawButton` function and `ButtonStyle` interface for creating consistently styled and centered buttons across different UI panels. Uses `ctx.fillText` directly for reliable text rendering.
 *   **`db.ts`**: IndexedDB persistence layer abstraction. 
     *   Provides `saveSceneState`, `loadSceneState`, `deleteSceneState` functions.
     *   Added `getAllSceneIds` function to retrieve all scene IDs from the database.
@@ -127,16 +133,16 @@ The architecture is component-based, centered around a main `Game` class that ma
 
 ## 3. Data Flow & State
 
-*   **Initialization:** `main.ts` -> `Game` -> `Game.init` -> Load sounds -> `loadPlayerData` (gets `currentSceneId`) -> Create `Player` -> Restore Player state -> Create `CreativeSelector` -> Load Creative Assets -> Create initial `GameScene` instance (passing `Game`) -> `GameScene.load` (loads common assets, `SceneStateManager.loadState`, generates default if needed, `sceneRenderer.updateWorldDimensions`) -> Game loop starts.
-*   **Update Cycle:** `Game.update` -> `CreativeSelector.update` -> Check debug teleport / save keys -> `Game.currentScene.update` -> `GameScene` delegates to `GameplayController.update` OR `CreativeController.update` -> Controllers interact -> `Player.update` -> `SceneRenderer.updateCamera` -> Handle Inventory Clicks -> `InputHandler.resetFrameState`.
-*   **Scene Transition Flow:** `GameplayController.update` -> `SceneTransitionSystem.update` -> `SceneTransitionSystem` checks transition conditions -> If triggered, calls `Game.changeScene`.
-*   **Draw Cycle:** `Game.draw` -> `Game.currentScene.draw` -> `GameScene` gets info -> Delegates to `SceneRenderer.drawScene` -> `SceneRenderer` draws world -> `Game` draws screen-space UI (`InventoryUI`, `CreativeSelector`).
+*   **Initialization:** (Added Crafting Manager/UI Init) `main.ts` -> `Game` -> `Game.init` -> Load sounds -> `loadPlayerData` -> Create `Player` -> Restore Player state -> Create `CreativeSelector` -> Load Creative Assets -> Create initial `GameScene` -> `GameScene.load` -> **Create `CraftingManager`** -> **Create `CraftingUI`** -> Game loop starts.
+*   **Update Cycle:** `Game.update` -> `CreativeSelector.update` -> Check keys -> **`CraftingUI.update` (if open)** -> If Crafting UI NOT open: `Game.currentScene.update` -> (`GameplayController.update` OR `CreativeController.update`) -> Controllers interact -> `Player.update` -> `SceneRenderer.updateCamera` -> Handle Inventory Clicks -> **`CraftingManager.update` (if crafting)** -> `InputHandler.resetFrameState`.
+*   **Draw Cycle:** `Game.draw` -> `Game.currentScene.draw` -> `SceneRenderer.drawScene` -> `Renderer` draws world -> `Game` draws screen-space UI (`InventoryUI`, `CreativeSelector`) -> **`Renderer.drawProgressBar` (if crafting)** -> **`CraftingUI.draw` (if open)**.
 *   **Scene Transition (`Game.changeScene(newId, context?)`):** Triggered via `SceneTransitionSystem`. Saves outgoing scene -> Updates player data (`currentSceneId`) -> Creates new `GameScene` (passing `context`) -> Calls `newScene.load` -> Positions player (using `context.targetPosition` or defaults) -> Resets input.
 *   **State Location:**
-    *   Global Game State: `Game` class (`creativeModeEnabled`, `currentSceneId`).
+    *   Global Game State: `Game` class (`creativeModeEnabled`, `currentSceneId`, `playerIsCrafting`).
     *   Creative Selection State: `CreativeModeSelector`.
-    *   Scene Layout State: Managed by `EntityManager`, `TerrainManager` within `GameScene`. Persisted/loaded via `SceneStateManager` to IndexedDB, keyed by `sceneId`.
-    *   Object-Specific State: `Tree` (health), `House` (ID), `DoorExit` (targetSceneId, targetPosition).
+    *   **Crafting State:** Current task managed by `CraftingManager`; UI state managed by `CraftingUI`.
+    *   Scene Layout State: `EntityManager`, `TerrainManager`. Persisted via `SceneStateManager`.
+    *   Object-Specific State: `Tree`, `House`, `DoorExit`.
     *   Player Progress Persistence: `localStorage` (`PlayerSaveData`) via `Game` methods.
     *   Input State: `InputHandler` class.
     *   Asset Cache: `AssetLoader`, `AudioPlayer`.
@@ -167,6 +173,12 @@ The architecture is component-based, centered around a main `Game` class that ma
     *   The system intelligently preserves related scenes via the "Delete Other Scenes" utility.
     *   During scene regeneration, interior scenes linked to houses are properly deleted to prevent orphaned data.
     *   Houses are regenerated with new unique IDs, creating fresh interiors when entered.
+*   **Crafting System:** Introduced a modular crafting system composed of:
+    *   Data definitions (`crafting/recipes.ts`).
+    *   State management for active crafts (`crafting/craftingTask.ts`).
+    *   Core logic orchestration (`crafting/craftingManager.ts`).
+    *   User interface (`ui/craftingUI.ts`).
+*   **Reusable UI Components:** Demonstrated via `ui/components/button.ts`, promoting consistency and maintainability in UI rendering.
 
 ## 5. Additional Notes
 
