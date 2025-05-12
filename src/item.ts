@@ -68,6 +68,25 @@ export const ITEM_CONFIG: { [key: string]: Item } = {
         maxStackSize: 50,
         equipable: false,
     },
+    'stick': {
+        id: 'stick',
+        name: 'Stick',
+        description: 'A sturdy stick.',
+        assetPath: '/assets/svg/stick.svg',
+        itemType: ItemType.RESOURCE,
+        stackable: true,
+        maxStackSize: 50,
+        equipable: false,
+    },
+    'knife': {
+        id: 'knife',
+        name: 'Knife',
+        description: 'A sharp knife.',
+        assetPath: '/assets/svg/knife.svg',
+        itemType: ItemType.TOOL, // Or WEAPON, depending on desired use
+        stackable: false,
+        equipable: true,
+    },
     // Add more items here as needed
 };
 

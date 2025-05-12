@@ -32,6 +32,7 @@ export interface BiomeConfig {
     // Densities for other resources
     roundStoneDensity?: number; // Number of round stones to generate
     triangularStoneDensity?: number; // Number of triangular stones to generate
+    stickDensity?: number; // Number of sticks to generate
     
     // Secondary terrain features
     secondaryTerrainType?: TerrainType; // Type of secondary terrain (water, road, etc.)
@@ -57,6 +58,7 @@ export const BIOME_CONFIG: Record<BiomeType, BiomeConfig> = {
         // No secondary terrain in basic sparse forest
         roundStoneDensity: 1, // Fewer round stones
         triangularStoneDensity: 1, // Fewer sharp stones
+        stickDensity: 1, // Add some sticks
     },
     /* 
     // Example of future biome types:
@@ -272,6 +274,12 @@ export class BiomeManager {
         const triangularStoneCount = config.triangularStoneDensity || 0;
         for (let i = 0; i < triangularStoneCount; i++) {
             this.spawnRandomItem('stone_triangular', 1);
+        }
+
+        // Populate Sticks
+        const stickCount = config.stickDensity || 0;
+        for (let i = 0; i < stickCount; i++) {
+            this.spawnRandomItem('stick', 1);
         }
 
         // Future: Add more complex entity population logic

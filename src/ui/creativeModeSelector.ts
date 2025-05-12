@@ -111,7 +111,7 @@ export class CreativeModeSelector {
         }
 
         // Add specific Items (e.g., Axe, Log)
-        const itemIdsToAdd = ['axe', 'log']; // Removed 'door-exit'
+        const itemIdsToAdd = ['axe', 'log', 'knife']; // Add 'knife' here
         for (const itemId of itemIdsToAdd) {
             const itemConfig = this.itemConfig[itemId];
             if (itemConfig) {
